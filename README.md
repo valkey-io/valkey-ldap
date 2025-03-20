@@ -1,4 +1,4 @@
-# ValkeyLDAP - Valkey LDAP authentication module
+# ValkeyLDAP - Valkey LDAP authentication module  ![CI](https://github.com/rjd15372/valkey-ldap/actions/workflows/ci.yml/badge.svg)
 
 ## Build Instructions
 

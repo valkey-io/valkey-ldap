@@ -1,0 +1,26 @@
+name: CI
+
+on:
+    push:
+        branches:
+            - main
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        container: fedora:latest
+
+        steps:
+            - name: Checkout repo
+              uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+            - name: Install dependencies
+              run: |
+                sudo yum install -y valkey-devel cmake openssl-devel make clang clang-tools-extra openldap-devel
+
+            - name: Build Module
+              run: |
+                mkdir -p build
+                cd build
+                cmake ..
+                make -j$(nproc)
