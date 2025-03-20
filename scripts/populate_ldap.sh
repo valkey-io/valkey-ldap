@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Wait for ldap server to be online
+while true; do
+    nc -z localhost 389 && break
+done
+
 ADMIN_PASSWD=admin123!
 DC="dc=valkey,dc=io"
 ADMIN_DN="cn=admin,${DC}"
@@ -40,7 +45,7 @@ EOF
 # description: App Development Team
 # member: cn=amrutha,ou=devops,dc=example,dc=in
 # member: cn=charlie,ou=appdev,dc=example,dc=in
-# 
+#
 # # Group: devops-team
 # dn: cn=devops-team,dc=example,dc=in
 # objectClass: top
@@ -50,19 +55,19 @@ EOF
 # member: cn=amrutha,ou=devops,dc=example,dc=in
 # member: cn=amit,ou=appdev,dc=example,dc=in
 # EOF
-# 
+#
 # # Modify and apply MemberOf attribute to Users in Groups.
 # ldapadd -x -w ${ADMIN_PASSWD} -D ${ADMIN_DN} << EOF
 # dn: cn=amrutha,ou=devops,dc=example,dc=in
 # changetype: modify
 # add: memberOf
 # memberOf: cn=devops-team,dc=example,dc=in
-# 
+#
 # dn: cn=amit,ou=appdev,dc=example,dc=in
 # changetype: modify
 # add: memberOf
 # memberOf: cn=appdev-team,dc=example,dc=in
-# 
+#
 # dn: cn=charile,ou=appdev,dc=example,dc=in
 # changetype: modify
 # add: memberOf

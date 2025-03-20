@@ -1,0 +1,33 @@
+name: valkey-ldap
+services:
+  ldap:
+    image: osixia/openldap:1.5.0
+    container_name: ldap
+    environment:
+        - LDAP_ORGANISATION=valkey
+        - LDAP_DOMAIN=valkey.io
+        - "LDAP_BASE_DN=dc=valkey,dc=io"
+        - LDAP_ADMIN_PASSWORD=admin123!
+    ports:
+        - 389:389
+        - 636:636
+    volumes:
+        - ../../scripts:/scripts
+    post_start:
+        - command: sed -i /etc/apt/sources.list -e 's/^.*backports.*//g'
+        - command: apt update
+        - command: apt install -y netcat
+        - command: /scripts/populate_ldap.sh
+
+  valkey:
+    build:
+      dockerfile: Dockerfile-valkey-ldap
+      context: ./
+    image: valkey-ldap
+    container_name: valkey
+    ports:
+        - 6379:6379
+    volumes:
+        - ../../build:/valkey-ldap
+
+
