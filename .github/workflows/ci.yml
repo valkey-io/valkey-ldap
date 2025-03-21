@@ -23,21 +23,6 @@ jobs:
                 cmake -S . -B build
                 cmake --build build --target all -j$(nproc)
 
-            - name: Start testing services
-              run: |
-                cd scripts/docker
-                docker compose up -d --wait
-                while true; do echo "Waiting for LDAP"; sleep 1; nc -z localhost 389 && break; done
-                while true; do echo "Waiting for Valkey"; sleep 1; nc -z localhost 6379 && break; done
-                cd ../..
-                ./scripts/populate_ldap.sh
-
             - name: Run unit tests
               run: |
-                cd build
-                ctest --output-on-failure
-
-            - name: Stop testing services
-              run: |
-                cd scripts/docker
-                docker compose down
+                ctest --test-dir build --output-on-failure

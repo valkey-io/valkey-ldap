@@ -16,8 +16,8 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(
   unit_tests
-  sanity_test.cpp
-  vk_ldap_test.cpp
+  test_sanity.cpp
+  test_vk_ldap.cpp
 
   ../../src/vk_ldap.c
 )

@@ -38,14 +38,10 @@ To stop the servers, run:
 
 ## Automated Unit Tests
 
-The unit tests use the [googletest](https://github.com/google/googletest) framework and depend on the availability of the LDAP server. Therefore we need to start the LDAP server before running the unit tests.
+The unit tests use the [googletest](https://github.com/google/googletest) framework and run using CMake test tool:
 
-To run the tests locally:
+To run the tests locally do:
 
 ```bash
-./scripts/start_valkey_ldap.sh
-cd build
-ctest
-cd ..
-./scripts/stop_valkey_ldap.sh
+ctest --test-dir build
 ```
