@@ -19,7 +19,7 @@ while true; do
     nc -z localhost 6379 && break
 done
 
-docker run --rm --net=host -ti valkey-ldap valkey-cli
+docker exec -ti valkey valkey-cli
 
 if [ ! -z $STOP_SERVERS ]; then
     ./scripts/stop_valkey_ldap.sh

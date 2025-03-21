@@ -1,39 +1,37 @@
-#include <stdio.h>
-#define LDAP_DEPRECATED 1
-
-#include <ldap.h>
 #include <valkeymodule.h>
+#include <assert.h>
+#include "vk_ldap.h"
 
 int test_ldap_auth(ValkeyModuleCtx* ctx, ValkeyModuleString** argv, int argc) {
-    LDAP* ld;
-    int version = LDAP_VERSION3;
-
     if (argc != 3) return ValkeyModule_WrongArity(ctx);
 
-    if (ldap_initialize(&ld, "ldap://ldap")) {
-        ValkeyModule_Log(ctx, "warning", "failed to initialize ldap connection");
+    char *err = NULL;
+    LDAPConn *lpconn = vk_ldap_init("ldap://ldap", &err);
+
+    if (lpconn == NULL) {
+        assert(err != NULL);
+        ValkeyModule_Log(ctx, "warning", "Failed to initialize ldap connection: %s", err);
         return VALKEYMODULE_ERR;
     }
-
-    ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &version);
 
     const char *username = ValkeyModule_StringPtrLen(argv[1], NULL);
     const char *password = ValkeyModule_StringPtrLen(argv[2], NULL);
     char *user_dn;
     asprintf(&user_dn, "CN=%s,OU=devops,DC=valkey,DC=io", username);
 
-    int rc = ldap_bind_s(ld, user_dn, password, LDAP_AUTH_SIMPLE);
+    err = NULL;
+    int ret = vk_ldap_auth(lpconn, user_dn, password, &err);
     free(user_dn);
 
-    if (rc != LDAP_SUCCESS) {
-        ValkeyModule_Log(ctx, "warning", "ldap bind failed: %s", ldap_err2string(rc));
-        ValkeyModule_ReplyWithErrorFormat(ctx, "Authentication failed: %s", ldap_err2string(rc));
+    if (ret != 0) {
+        ValkeyModule_Log(ctx, "warning", "ldap bind failed: %s", err);
+        ValkeyModule_ReplyWithErrorFormat(ctx, "Authentication failed: %s", err);
         return VALKEYMODULE_OK;
     }
 
-    ValkeyModule_Log(ctx, "info", "bind successful: rc=%d", rc);
+    ValkeyModule_Log(ctx, "info", "User %s bind successful", username);
 
-    ldap_unbind(ld);
+    vk_ldap_destroy(lpconn);
 
     ValkeyModule_ReplyWithSimpleString(ctx, "OK");
 

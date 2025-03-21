@@ -50,3 +50,7 @@ set_target_properties(valkeyldap PROPERTIES
 install(TARGETS valkeyldap
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+enable_testing()
+
+add_subdirectory(test)
