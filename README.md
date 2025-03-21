@@ -5,21 +5,12 @@
 ValkeyLDAP uses CMake for building the Valkey module.
 
 ```bash
-mkdir build && cd build
-cmake ..
-make
-```
-
-The default build configuration assumes that the Valkey module API header is present in `/usr/include`.
-If that is not the case, we can specify the path to the module API header file using the build option `-DVALKEYMODULE_HEADER_PATH`.
-
-```bash
 mkdir build
-cmake -DVALKEYMODULE_HEADER_PATH=<path_to_valkeymodule.h> ..
-make
+cmake -S . -B build
+cmake --build build --target all
 ```
 
-## Manual testing of the module
+## Manual Module Testing
 
 The project has a collection of scripts to start an LDAP and Valkey server using docker-compose to easily test the module.
 
@@ -42,5 +33,19 @@ You can connect to the LDAP server and Valkey server from the localhost address.
 To stop the servers, run:
 
 ```bash
+./scripts/stop_valkey_ldap.sh
+```
+
+## Automated Unit Tests
+
+The unit tests use the [googletest](https://github.com/google/googletest) framework and depend on the availability of the LDAP server. Therefore we need to start the LDAP server before running the unit tests.
+
+To run the tests locally:
+
+```bash
+./scripts/start_valkey_ldap.sh
+cd build
+ctest
+cd ..
 ./scripts/stop_valkey_ldap.sh
 ```

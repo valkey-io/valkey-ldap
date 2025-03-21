@@ -1,0 +1,13 @@
+dn: cn=appdev-team,dc=example,dc=in
+objectClass: top
+objectClass: groupOfNames
+cn: appdev-team
+description: App Development Team
+member: cn=user2,ou=appdev,dc=example,dc=in
+
+dn: cn=devops-team,dc=example,dc=in
+objectClass: top
+objectClass: groupOfNames
+cn: devops-team
+description: DevOps Team
+member: cn=user1,ou=devops,dc=example,dc=in

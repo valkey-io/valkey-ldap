@@ -1,0 +1,20 @@
+dn: ou=devops,dc=valkey,dc=io
+objectClass: organizationalUnit
+ou: devops
+
+dn: ou=appdev,dc=valkey,dc=io
+objectClass: organizationalUnit
+ou: appdev
+
+dn: cn=user1,ou=devops,dc=valkey,dc=io
+objectClass: person
+cn: user1
+sn: User1
+userPassword: user1@123
+
+dn: cn=user2,ou=appdev,dc=valkey,dc=io
+objectClass: inetOrgPerson
+cn: user2
+sn: User2
+uid: user2
+userPassword: user2@123
