@@ -8,7 +8,6 @@ on:
 jobs:
     build:
         runs-on: ubuntu-latest
-        container: fedora:latest
 
         steps:
             - name: Checkout repo
@@ -16,11 +15,29 @@ jobs:
 
             - name: Install dependencies
               run: |
-                sudo yum install -y valkey-devel cmake openssl-devel make clang clang-tools-extra openldap-devel
+                sudo apt install -y cmake libssl-dev clang-19 clang-tools-19 clang-format-19 libldap-dev netcat-traditional docker-compose ldap-utils
 
             - name: Build Module
               run: |
                 mkdir -p build
+                cmake -S . -B build
+                cmake --build build --target all -j$(nproc)
+
+            - name: Start testing services
+              run: |
+                cd scripts/docker
+                docker compose up -d --wait
+                while true; do echo "Waiting for LDAP"; sleep 1; nc -z localhost 389 && break; done
+                while true; do echo "Waiting for Valkey"; sleep 1; nc -z localhost 6379 && break; done
+                cd ../..
+                ./scripts/populate_ldap.sh
+
+            - name: Run unit tests
+              run: |
                 cd build
-                cmake ..
-                make -j$(nproc)
+                ctest --output-on-failure
+
+            - name: Stop testing services
+              run: |
+                cd scripts/docker
+                docker compose down

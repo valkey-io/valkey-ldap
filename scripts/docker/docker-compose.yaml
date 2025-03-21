@@ -13,11 +13,11 @@ services:
         - 636:636
     volumes:
         - ../../scripts:/scripts
-    post_start:
-        - command: sed -i /etc/apt/sources.list -e 's/^.*backports.*//g'
-        - command: apt update
-        - command: apt install -y netcat
-        - command: /scripts/populate_ldap.sh
+    # post_start:
+    #     - command: sed -i /etc/apt/sources.list -e 's/^.*backports.*//g'
+    #     - command: apt update
+    #     - command: apt install -y netcat
+    #     - command: /scripts/populate_ldap.sh
 
   valkey:
     build:

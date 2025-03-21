@@ -10,17 +10,17 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
-set(VALKEYMODULE_HEADER_PATH "/usr/include/valkeymodule.h" CACHE FILEPATH "The path to the valkeymodule.h file")
-
-cmake_path(GET VALKEYMODULE_HEADER_PATH PARENT_PATH VALKEYMODULE_HEADER_DIRECTORY)
-
-if (NOT EXISTS "${VALKEYMODULE_HEADER_DIRECTORY}/valkeymodule.h")
-    message(FATAL_ERROR "Can't find valkeymodule.h header file in ${VALKEYMODULE_HEADER_DIRECTORY}/valkeymodule.h. Please specify the location with option -DVALKEYMODULE_HEADER_PATH" )
-endif()
+include(FetchContent)
+FetchContent_Declare(
+    valkey
+    GIT_REPOSITORY https://github.com/valkey-io/valkey.git
+    GIT_TAG        8.0.2
+)
+FetchContent_MakeAvailable(valkey)
 
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/include)
 
-configure_file(${VALKEYMODULE_HEADER_PATH} ${CMAKE_CURRENT_BINARY_DIR}/include COPYONLY)
+configure_file(${FETCHCONTENT_BASE_DIR}/valkey-src/src/valkeymodule.h ${CMAKE_CURRENT_BINARY_DIR}/include COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/test/valkey.conf ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror -Wunused -Wunused-parameter")
