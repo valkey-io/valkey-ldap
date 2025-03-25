@@ -1,9 +1,8 @@
 name: CI
 
 on:
-    push:
-        branches:
-            - main
+  push:
+  pull_request:
 
 jobs:
     build:
@@ -15,7 +14,8 @@ jobs:
 
             - name: Install dependencies
               run: |
-                sudo apt install -y cmake libssl-dev clang-19 clang-tools-19 clang-format-19 libldap-dev netcat-traditional docker-compose ldap-utils
+                sudo apt-get update -y
+                sudo apt-get install -y cmake libssl-dev clang-19 clang-tools-19 clang-format-19 libldap-dev netcat-traditional docker-compose ldap-utils
 
             - name: Build Module
               run: |
@@ -23,6 +23,6 @@ jobs:
                 cmake -S . -B build
                 cmake --build build --target all -j$(nproc)
 
-            - name: Run unit tests
+            - name: Run tests
               run: |
                 ctest --test-dir build --output-on-failure
