@@ -1,12 +1,13 @@
-#include <valkeymodule.h>
 #include <assert.h>
+#include <valkeymodule.h>
 #include "vk_ldap.h"
 
 int test_ldap_auth(ValkeyModuleCtx* ctx, ValkeyModuleString** argv, int argc) {
-    if (argc != 3) return ValkeyModule_WrongArity(ctx);
+    if (argc != 3)
+        return ValkeyModule_WrongArity(ctx);
 
-    char *err = NULL;
-    LDAPConn *lpconn = vk_ldap_init("ldap://ldap", &err);
+    char* err = NULL;
+    LDAPConn* lpconn = vk_ldap_init("ldap://ldap", &err);
 
     if (lpconn == NULL) {
         assert(err != NULL);
@@ -14,9 +15,9 @@ int test_ldap_auth(ValkeyModuleCtx* ctx, ValkeyModuleString** argv, int argc) {
         return VALKEYMODULE_ERR;
     }
 
-    const char *username = ValkeyModule_StringPtrLen(argv[1], NULL);
-    const char *password = ValkeyModule_StringPtrLen(argv[2], NULL);
-    char *user_dn;
+    const char* username = ValkeyModule_StringPtrLen(argv[1], NULL);
+    const char* password = ValkeyModule_StringPtrLen(argv[2], NULL);
+    char* user_dn;
     asprintf(&user_dn, "CN=%s,OU=devops,DC=valkey,DC=io", username);
 
     err = NULL;
