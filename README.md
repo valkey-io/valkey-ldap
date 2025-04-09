@@ -2,12 +2,10 @@
 
 ## Build Instructions
 
-ValkeyLDAP uses CMake for building the Valkey module.
+ValkeyLDAP uses Cargo for building the Valkey module.
 
 ```bash
-mkdir build
-cmake -S . -B build
-cmake --build build --target all
+cargo build
 ```
 
 ## Manual Module Testing
@@ -36,12 +34,23 @@ To stop the servers, run:
 ./scripts/stop_valkey_ldap.sh
 ```
 
-## Automated Unit Tests
+## Automated Integration Tests
 
-The unit tests use the [googletest](https://github.com/google/googletest) framework and run using CMake test tool:
+The integration tests are written in python 3, and live in the `test/integration` directory. To run the tests locally we suggest to create a virtual environment to install the necessary python dependencies.
 
-To run the tests locally do:
+Assuming you have python 3 installed in your system, to install the python dependencies using a virtual environment do the following:
 
 ```bash
-ctest --test-dir build
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r test/integration/requirements.txt
+```
+
+After setting up the virtual environment, you can run the test using the following commands:
+
+```bash
+./script/start_valkey_ldap.sh
+pytest test/integration
+./script/stop_valkey_ldap.sh
 ```
