@@ -15,14 +15,33 @@ jobs:
             - name: Install dependencies
               run: |
                 sudo apt-get update -y
-                sudo apt-get install -y cmake libssl-dev clang-19 clang-tools-19 clang-format-19 libldap-dev netcat-traditional docker-compose ldap-utils
+                sudo apt-get install -y libssl-dev libldap-dev netcat-traditional docker-compose ldap-utils
+            - name: Set up Python
+              uses: actions/setup-python@v3
+              with:
+                python-version: '3.13'
+            - name: Install Python test dependencies
+              run: |
+                python -m pip install --upgrade pip
+                pip install -r test/integration/requirements.txt
 
             - name: Build Module
               run: |
-                mkdir -p build
-                cmake -S . -B build
-                cmake --build build --target all -j$(nproc)
+                cargo build
 
-            - name: Run tests
+            - name: Start Valkey and LDAP services
               run: |
-                ctest --test-dir build --output-on-failure
+                ./scripts/start_valkey_ldap.sh
+
+            - name: Run Unit Tests
+              run: |
+                cargo test --features enable-system-alloc
+
+            - name: Run Integration Tests
+              run: |
+                python3 -m pytest test/integration
+
+            - name: Stop Valkey and LDAP services
+              run: |
+                ./scripts/stop_valkey_ldap.sh
+
