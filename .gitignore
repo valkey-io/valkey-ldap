@@ -3,8 +3,12 @@
 build
 **/__pycache__
 venv
+scripts/docker/certs
+test/valkey-ldap-client.key
+test/valkey-ldap-client.crt
 
 
 # Added by cargo
 
 /target
+
