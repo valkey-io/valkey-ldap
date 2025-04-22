@@ -1,9 +1,10 @@
 #!/bin/bash
 
-if [ `basename $(pwd)` != "valkey-ldap" ]; then
-    echo "ERROR: run this script from the repo root directory"
-    exit 1
-fi
+while [[ ! $PWD/ = */valkey-ldap/ ]]; do
+    cd ..
+done
+
+cargo build
 
 DOCKER_COMPOSE_RUNNING=`docker compose ls --filter name=valkey-ldap -q && true`
 
@@ -18,6 +19,9 @@ fi
 while true; do
     nc -z localhost 6379 && break
 done
+
+docker exec -ti valkey valkey-cli config set ldap.servers "ldaps://ldap"
+docker exec -ti valkey valkey-cli config set ldap.bind_dn_suffix ",OU=devops,DC=valkey,DC=io"
 
 docker exec -ti valkey valkey-cli
 

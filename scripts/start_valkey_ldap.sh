@@ -1,13 +1,10 @@
 #!/bin/bash
 
-if [[ ! $PWD/ = */valkey-ldap/* ]]; then
-    echo "ERROR: run this script from the repo directory"
-    exit 1
-fi
-
 while [[ ! $PWD/ = */valkey-ldap/ ]]; do
     cd ..
 done
+
+cargo build
 
 DOCKER_COMPOSE_RUNNING=`docker compose ls --filter name=valkey-ldap -q && true`
 

@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 jobs:
@@ -39,7 +41,7 @@ jobs:
 
             - name: Run Integration Tests
               run: |
-                python3 -m pytest test/integration
+                python3 -m pytest -v test/integration
 
             - name: Stop Valkey and LDAP services
               run: |

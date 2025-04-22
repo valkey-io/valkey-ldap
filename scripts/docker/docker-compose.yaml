@@ -6,18 +6,16 @@ services:
     environment:
         - LDAP_ORGANISATION=valkey
         - LDAP_DOMAIN=valkey.io
-        - "LDAP_BASE_DN=dc=valkey,dc=io"
+        - LDAP_BASE_DN=dc=valkey,dc=io
         - LDAP_ADMIN_PASSWORD=admin123!
+        - LDAP_TLS_CRT_FILENAME=valkey-ldap.crt
+        - LDAP_TLS_KEY_FILENAME=valkey-ldap.key
+        - LDAP_TLS_CA_CRT_FILENAME=valkey-ldap-ca.crt
     ports:
         - 389:389
         - 636:636
     volumes:
-        - ../../scripts:/scripts
-    # post_start:
-    #     - command: sed -i /etc/apt/sources.list -e 's/^.*backports.*//g'
-    #     - command: apt update
-    #     - command: apt install -y netcat
-    #     - command: /scripts/populate_ldap.sh
+        - ./certs:/container/service/slapd/assets/certs
 
   valkey:
     build:
@@ -28,7 +26,6 @@ services:
     ports:
         - 6379:6379
     volumes:
-        # - ../../build:/valkey-ldap
         - ../../target/debug:/valkey-ldap
 
 

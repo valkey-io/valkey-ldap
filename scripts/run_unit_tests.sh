@@ -4,6 +4,8 @@ while [[ ! $PWD/ = */valkey-ldap/ ]]; do
     cd ..
 done
 
+cargo build
+
 STOP_SERVERS=
 
 if [ -z $DOCKER_COMPOSE_RUNNING ]; then

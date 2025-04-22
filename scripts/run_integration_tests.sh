@@ -4,6 +4,8 @@ while [[ ! $PWD/ = */valkey-ldap/ ]]; do
     cd ..
 done
 
+DOCKER_COMPOSE_RUNNING=`docker compose ls --filter name=valkey-ldap -q && true`
+
 STOP_SERVERS=
 
 if [ -z $DOCKER_COMPOSE_RUNNING ]; then
@@ -11,7 +13,7 @@ if [ -z $DOCKER_COMPOSE_RUNNING ]; then
     STOP_SERVERS=true
 fi
 
-pytest test/integration
+pytest -v test/integration
 
 if [ ! -z $STOP_SERVERS ]; then
     ./scripts/stop_valkey_ldap.sh
