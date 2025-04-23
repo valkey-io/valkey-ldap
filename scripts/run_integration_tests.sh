@@ -4,6 +4,8 @@ while [[ ! $PWD/ = */valkey-ldap/ ]]; do
     cd ..
 done
 
+cargo build
+
 DOCKER_COMPOSE_RUNNING=`docker compose ls --filter name=valkey-ldap -q && true`
 
 STOP_SERVERS=
