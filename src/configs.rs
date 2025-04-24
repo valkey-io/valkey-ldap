@@ -58,18 +58,18 @@ pub fn ldap_server_list_set_callback(
     Ok(())
 }
 
-pub fn get_bind_dn_prefix(mod_ctx: &Context) -> String {
-    let bind_dn_prefix = LDAP_BIND_DN_PREFIX.lock(mod_ctx);
+pub fn get_bind_dn_prefix(ctx: &Context) -> String {
+    let bind_dn_prefix = LDAP_BIND_DN_PREFIX.lock(ctx);
     bind_dn_prefix.to_string_lossy()
 }
 
-pub fn get_bind_dn_suffix(mod_ctx: &Context) -> String {
-    let bind_dn_suffix = LDAP_BIND_DN_SUFFIX.lock(mod_ctx);
+pub fn get_bind_dn_suffix(ctx: &Context) -> String {
+    let bind_dn_suffix = LDAP_BIND_DN_SUFFIX.lock(ctx);
     bind_dn_suffix.to_string_lossy()
 }
 
-pub fn get_tls_ca_cert_path(mod_ctx: &Context) -> Option<String> {
-    let tls_ca_cert_path = LDAP_TLS_CA_CERT_PATH.lock(mod_ctx);
+pub fn get_tls_ca_cert_path(ctx: &Context) -> Option<String> {
+    let tls_ca_cert_path = LDAP_TLS_CA_CERT_PATH.lock(ctx);
     let tls_ca_cert_path_str = tls_ca_cert_path.to_string();
     match tls_ca_cert_path_str.as_str() {
         "" => None,
@@ -77,8 +77,8 @@ pub fn get_tls_ca_cert_path(mod_ctx: &Context) -> Option<String> {
     }
 }
 
-pub fn get_tls_cert_path(mod_ctx: &Context) -> Option<String> {
-    let tls_cert_path = LDAP_TLS_CERT_PATH.lock(mod_ctx);
+pub fn get_tls_cert_path(ctx: &Context) -> Option<String> {
+    let tls_cert_path = LDAP_TLS_CERT_PATH.lock(ctx);
     let tls_cert_path_str = tls_cert_path.to_string();
     match tls_cert_path_str.as_str() {
         "" => None,
@@ -86,8 +86,8 @@ pub fn get_tls_cert_path(mod_ctx: &Context) -> Option<String> {
     }
 }
 
-pub fn get_tls_key_path(mod_ctx: &Context) -> Option<String> {
-    let tls_key_path = LDAP_TLS_KEY_PATH.lock(mod_ctx);
+pub fn get_tls_key_path(ctx: &Context) -> Option<String> {
+    let tls_key_path = LDAP_TLS_KEY_PATH.lock(ctx);
     let tls_key_path_str = tls_key_path.to_string();
     match tls_key_path_str.as_str() {
         "" => None,
@@ -95,12 +95,12 @@ pub fn get_tls_key_path(mod_ctx: &Context) -> Option<String> {
     }
 }
 
-pub fn is_starttls_enabled(mod_ctx: &Context) -> bool {
-    let use_starttls = LDAP_USE_STARTTLS.lock(mod_ctx);
+pub fn is_starttls_enabled(ctx: &Context) -> bool {
+    let use_starttls = LDAP_USE_STARTTLS.lock(ctx);
     *use_starttls
 }
 
-pub fn is_auth_enabled(mod_ctx: &Context) -> bool {
-    let auth_enabled = LDAP_AUTH_ENABLED.lock(mod_ctx);
+pub fn is_auth_enabled(ctx: &Context) -> bool {
+    let auth_enabled = LDAP_AUTH_ENABLED.lock(ctx);
     *auth_enabled
 }

@@ -38,11 +38,12 @@ class Worker(Thread):
         )
 
 
+USAGE_STR = "Usage: python auth_requests.py [-(ldaps|starttls)] -n<num_auth_requests> -w<num_workers>"
+
+
 def main():
     if len(sys.argv) < 3:
-        print(
-            "Usage: python auth_requests.py [-(ldaps|starttls)] -n<num_auth_requests> -w<num_workers>"
-        )
+        print()
         exit(1)
 
     num_requests = None
@@ -61,23 +62,17 @@ def main():
             use_starttls = True
         else:
             print(f"Error: invalid option {arg}")
-            print(
-                "Usage: python auth_requests.py [-(ldaps|starttls)] -n<num_auth_requests> -w<num_workers>"
-            )
+            print(USAGE_STR)
             exit(1)
 
     if num_requests is None or num_workers is None:
         print("Error: <num_auth_requests> and <num_workers> was not specified")
-        print(
-            "Usage: python auth_requests.py [-(ldaps|starttls)] -n<num_auth_requests> -w<num_workers>"
-        )
+        print(USAGE_STR)
         exit(1)
 
     if use_ldaps and use_starttls:
         print("Error: -ldaps and -starttls are exclusive options")
-        print(
-            "Usage: python auth_requests.py [-(ldaps|starttls)] -n<num_auth_requests> -w<num_workers>"
-        )
+        print(USAGE_STR)
         exit(1)
 
     vk = valkey.Valkey(host="localhost", port=6379, db=0)

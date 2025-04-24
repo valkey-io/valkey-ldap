@@ -4,7 +4,7 @@ while [[ ! $PWD/ = */valkey-ldap/ ]]; do
     cd ..
 done
 
-cargo build
+cargo build || exit 1
 
 DOCKER_COMPOSE_RUNNING=`docker compose ls --filter name=valkey-ldap -q && true`
 
@@ -20,8 +20,9 @@ while true; do
     nc -z localhost 6379 && break
 done
 
-docker exec -ti valkey valkey-cli config set ldap.servers "ldaps://ldap"
+docker exec -ti valkey valkey-cli config set ldap.servers "ldap://ldap"
 docker exec -ti valkey valkey-cli config set ldap.bind_dn_suffix ",OU=devops,DC=valkey,DC=io"
+docker exec -ti valkey valkey-cli ACL SETUSER user1 ON >pass allcommands
 
 docker exec -ti valkey valkey-cli
 
