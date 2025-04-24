@@ -15,7 +15,7 @@ if [ -z $DOCKER_COMPOSE_RUNNING ]; then
     STOP_SERVERS=true
 fi
 
-pytest -v test/integration
+python test/perf/auth_requests.py $*
 
 if [ ! -z $STOP_SERVERS ]; then
     ./scripts/stop_valkey_ldap.sh
