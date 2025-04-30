@@ -16,5 +16,5 @@ dn: cn=user2,ou=appdev,dc=valkey,dc=io
 objectClass: inetOrgPerson
 cn: user2
 sn: User2
-uid: user2
+uid: u2
 userPassword: user2@123

@@ -7,8 +7,25 @@ use url::Url;
 use lazy_static::lazy_static;
 use valkey_module::{
     ConfigurationValue, Context, ValkeyError, ValkeyGILGuard, ValkeyString,
-    configuration::ConfigurationContext,
+    configuration::ConfigurationContext, enum_configuration,
 };
+
+enum_configuration! {
+    #[derive(PartialEq)]
+    pub enum LdapAuthMode {
+        Bind = 1,
+        SearchAndBind = 2,
+    }
+}
+
+// enum_configuration! {
+//     #[derive(PartialEq)]
+//     pub enum LdapSearchScope {
+//         Base = 1,
+//         OneLevel = 2,
+//         SubTree = 3,
+//     }
+// }
 
 lazy_static! {
     pub static ref LDAP_SERVER_LIST: ValkeyGILGuard<ValkeyString> =
@@ -25,6 +42,22 @@ lazy_static! {
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_USE_STARTTLS: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
     pub static ref LDAP_AUTH_ENABLED: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
+    pub static ref LDAP_AUTH_MODE: ValkeyGILGuard<LdapAuthMode> =
+        ValkeyGILGuard::new(LdapAuthMode::Bind);
+    pub static ref LDAP_SEARCH_BASE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_SEARCH_SCOPE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_SEARCH_FILTER: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_SEARCH_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_SEARCH_BIND_DN: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_SEARCH_BIND_PASSWD: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_SEARCH_DN_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
 }
 
 pub fn ldap_server_list_set_callback(
@@ -103,4 +136,64 @@ pub fn is_starttls_enabled(ctx: &Context) -> bool {
 pub fn is_auth_enabled(ctx: &Context) -> bool {
     let auth_enabled = LDAP_AUTH_ENABLED.lock(ctx);
     *auth_enabled
+}
+
+pub fn is_bind_mode(ctx: &Context) -> bool {
+    let auth_mode = LDAP_AUTH_MODE.lock(ctx);
+    *auth_mode == LdapAuthMode::Bind
+}
+
+pub fn get_search_base(ctx: &Context) -> Option<String> {
+    let search_base = LDAP_SEARCH_BASE.lock(ctx);
+    let search_base_str = search_base.to_string();
+    match search_base_str.as_str() {
+        "" => None,
+        _ => Some(search_base_str),
+    }
+}
+
+pub fn get_search_scope(ctx: &Context) -> String {
+    let search_scope = LDAP_SEARCH_SCOPE.lock(ctx);
+    search_scope.to_string()
+}
+
+pub fn get_search_filter(ctx: &Context) -> Option<String> {
+    let search_filter = LDAP_SEARCH_FILTER.lock(ctx);
+    let search_filter_str = search_filter.to_string();
+    match search_filter_str.as_str() {
+        "" => None,
+        _ => Some(search_filter_str),
+    }
+}
+
+pub fn get_search_attribute(ctx: &Context) -> Option<String> {
+    let search_attribute = LDAP_SEARCH_ATTRIBUTE.lock(ctx);
+    let search_attribute_str = search_attribute.to_string();
+    match search_attribute_str.as_str() {
+        "" => None,
+        _ => Some(search_attribute_str),
+    }
+}
+
+pub fn get_search_bind_dn(ctx: &Context) -> Option<String> {
+    let bind_dn = LDAP_SEARCH_BIND_DN.lock(ctx);
+    let bind_dn_str = bind_dn.to_string();
+    match bind_dn_str.as_str() {
+        "" => None,
+        _ => Some(bind_dn_str),
+    }
+}
+
+pub fn get_search_bind_passwd(ctx: &Context) -> Option<String> {
+    let bind_passwd = LDAP_SEARCH_BIND_PASSWD.lock(ctx);
+    let bind_passwd_str = bind_passwd.to_string();
+    match bind_passwd_str.as_str() {
+        "" => None,
+        _ => Some(bind_passwd_str),
+    }
+}
+
+pub fn get_search_dn_attribute(ctx: &Context) -> String {
+    let dn_attribute = LDAP_SEARCH_DN_ATTRIBUTE.lock(ctx);
+    dn_attribute.to_string()
 }
