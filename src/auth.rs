@@ -55,7 +55,16 @@ pub fn ldap_auth_blocking_callback(
         configs::get_tls_key_path(ctx),
         configs::get_bind_dn_prefix(ctx),
         configs::get_bind_dn_suffix(ctx),
+        configs::get_search_base(ctx),
+        vkldap::from_string_to_scope(&configs::get_search_scope(ctx)),
+        configs::get_search_filter(ctx),
+        configs::get_search_attribute(ctx),
+        configs::get_search_bind_dn(ctx),
+        configs::get_search_bind_passwd(ctx),
+        configs::get_search_dn_attribute(ctx),
     );
+
+    let use_bind_mode = configs::is_bind_mode(ctx);
 
     let user_str = username.to_string();
     let pass_str = password.to_string();
@@ -63,7 +72,12 @@ pub fn ldap_auth_blocking_callback(
     let mut blocked_client = ctx.block_client_on_auth(auth_reply_callback, Some(free_callback));
 
     std::thread::spawn(move || {
-        let res = vkldap::vk_ldap_bind(settings, &user_str, &pass_str);
+        let res;
+        if use_bind_mode {
+            res = vkldap::vk_ldap_bind(settings, &user_str, &pass_str);
+        } else {
+            res = vkldap::vk_ldap_search_and_bind(settings, &user_str, &pass_str);
+        }
 
         if let Err(e) = blocked_client.set_blocked_private_data(res) {
             error!("failed to set the auth callback result: {e}");

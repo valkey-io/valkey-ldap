@@ -79,12 +79,70 @@ valkey_module! {
                 None,
                 None
             ],
+            [
+                "search_base",
+                &*configs::LDAP_SEARCH_BASE,
+                "",
+                ConfigurationFlags::DEFAULT,
+                None,
+                None
+            ],
+            [
+                "search_scope",
+                &*configs::LDAP_SEARCH_SCOPE,
+                "",
+                ConfigurationFlags::DEFAULT,
+                None,
+                None
+            ],
+            [
+                "search_filter",
+                &*configs::LDAP_SEARCH_FILTER,
+                "",
+                ConfigurationFlags::DEFAULT,
+                None,
+                None
+            ],
+            [
+                "search_attribute",
+                &*configs::LDAP_SEARCH_ATTRIBUTE,
+                "",
+                ConfigurationFlags::DEFAULT,
+                None,
+                None
+            ],
+            [
+                "search_bind_dn",
+                &*configs::LDAP_SEARCH_BIND_DN,
+                "",
+                ConfigurationFlags::DEFAULT,
+                None,
+                None
+            ],
+            [
+                "search_bind_passwd",
+                &*configs::LDAP_SEARCH_BIND_PASSWD,
+                "",
+                ConfigurationFlags::DEFAULT,
+                None,
+                None
+            ],
+            [
+                "search_dn_attribute",
+                &*configs::LDAP_SEARCH_DN_ATTRIBUTE,
+                "entryDN",
+                ConfigurationFlags::DEFAULT,
+                None,
+                None
+            ],
         ],
         bool: [
             ["use_starttls", &*configs::LDAP_USE_STARTTLS, false, ConfigurationFlags::DEFAULT, None],
             ["auth_enabled", &*configs::LDAP_AUTH_ENABLED, true, ConfigurationFlags::DEFAULT, None],
         ],
-        enum: [],
+        enum: [
+            ["auth_mode", &*configs::LDAP_AUTH_MODE, configs::LdapAuthMode::Bind, ConfigurationFlags::DEFAULT, None]
+        ],
         module_args_as_configuration: true,
     ]
 }
