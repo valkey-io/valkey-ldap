@@ -1,10 +1,11 @@
 use lazy_static::lazy_static;
 use ldap3::{LdapConn, LdapConnSettings, LdapError, Scope, SearchEntry};
-use log::debug;
 use native_tls::{Certificate, Identity, TlsConnector};
-use std::{collections::LinkedList, fs, io, sync::Mutex};
+use std::{collections::LinkedList, fs, sync::Mutex};
 use url::Url;
 use valkey_module::ValkeyError;
+
+use crate::configs::LdapSearchScope;
 
 struct VkLdapConfig {
     servers: LinkedList<Url>,
@@ -43,64 +44,98 @@ pub fn add_server(server_url: Url) {
 }
 
 pub enum VkLdapError {
-    String(String),
-}
-
-impl Clone for VkLdapError {
-    fn clone(&self) -> Self {
-        match self {
-            Self::String(msg) => Self::String(msg.clone()),
-        }
-    }
+    IOError(String, std::io::Error),
+    NoTLSKeyPathSet,
+    TLSError(String, native_tls::Error),
+    LdapBindError(LdapError),
+    LdapAdminBindError(LdapError),
+    LdapSearchError(LdapError),
+    LdapCreateContextError(LdapError),
+    NoLdapEntryFound(String),
+    MultipleEntryFound(String),
+    NoServerConfigured,
 }
 
 impl std::fmt::Display for VkLdapError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let VkLdapError::String(msg) = self;
-        write!(f, "{}", msg)
-    }
-}
-
-impl From<LdapError> for VkLdapError {
-    fn from(err: LdapError) -> Self {
-        VkLdapError::String(format!("LDAP error: {err}").to_string())
-    }
-}
-
-impl From<VkLdapError> for ValkeyError {
-    fn from(err: VkLdapError) -> Self {
-        let VkLdapError::String(msg) = err;
-        ValkeyError::String(msg)
+        match self {
+            VkLdapError::NoTLSKeyPathSet => write!(
+                f,
+                "no TLS key path specified. Please set the path for ldap.tls_key_path config"
+            ),
+            VkLdapError::IOError(msg, ioerr) => write!(f, "{msg}: {ioerr}"),
+            VkLdapError::TLSError(msg, tlserr) => write!(f, "{msg}: {tlserr}"),
+            VkLdapError::LdapBindError(ldaperr) => {
+                write!(f, "error in bind operation: {ldaperr}")
+            }
+            VkLdapError::LdapAdminBindError(ldaperr) => {
+                write!(f, "error in binding admin user: {ldaperr}")
+            }
+            VkLdapError::LdapSearchError(ldaperr) => {
+                write!(f, "failed to search ldap user: {ldaperr}")
+            }
+            VkLdapError::LdapCreateContextError(ldaperr) => {
+                write!(f, "failed to create LDAP connection context: {ldaperr}")
+            }
+            VkLdapError::NoLdapEntryFound(filter) => {
+                write!(f, "search filter '{filter}' returned no entries")
+            }
+            VkLdapError::MultipleEntryFound(filter) => {
+                write!(f, "search filter '{filter}' returned multiple entries")
+            }
+            VkLdapError::NoServerConfigured => write!(
+                f,
+                "no server set in configuration. Please set ldap.servers config option"
+            ),
+        }
     }
 }
 
 impl From<&VkLdapError> for ValkeyError {
     fn from(err: &VkLdapError) -> Self {
-        let VkLdapError::String(msg) = err;
-        ValkeyError::String(msg.clone())
+        err.into()
     }
 }
 
-impl From<io::Error> for VkLdapError {
-    fn from(err: std::io::Error) -> Self {
-        VkLdapError::String(format!("LDAP error: {err}").to_string())
-    }
+macro_rules! handle_io_error {
+    ($expr:expr, $errmsg:expr) => {
+        match $expr {
+            Ok(res) => res,
+            Err(err) => return Err(VkLdapError::IOError($errmsg, err)),
+        }
+    };
 }
 
-impl From<native_tls::Error> for VkLdapError {
-    fn from(err: native_tls::Error) -> Self {
-        VkLdapError::String(format!("LDAP error: {err}").to_string())
-    }
+macro_rules! handle_tls_error {
+    ($expr:expr, $errmsg:expr) => {
+        match $expr {
+            Ok(res) => res,
+            Err(err) => return Err(VkLdapError::TLSError($errmsg, err)),
+        }
+    };
+}
+
+macro_rules! handle_ldap_error {
+    ($expr:expr, $errtype:expr) => {
+        match $expr {
+            Ok(res) => match res.success() {
+                Ok(res) => res,
+                Err(err) => return Err($errtype(err)),
+            },
+            Err(err) => return Err($errtype(err)),
+        }
+    };
 }
 
 type Result<T> = std::result::Result<T, VkLdapError>;
 
-pub fn from_string_to_scope(scope_str: &str) -> Scope {
-    match scope_str {
-        "base" => Scope::Base,
-        "one" => Scope::OneLevel,
-        "sub" => Scope::Subtree,
-        _ => Scope::Subtree,
+impl From<LdapSearchScope> for Scope {
+    fn from(value: LdapSearchScope) -> Self {
+        match value {
+            LdapSearchScope::Base => Scope::Base,
+            LdapSearchScope::OneLevel => Scope::OneLevel,
+            LdapSearchScope::SubTree => Scope::Subtree,
+        }
     }
 }
 
@@ -129,7 +164,7 @@ impl VkLdapSettings {
         bind_db_prefix: String,
         bind_db_suffix: String,
         search_base: Option<String>,
-        search_scope: Scope,
+        search_scope: LdapSearchScope,
         search_filter: Option<String>,
         search_attribute: Option<String>,
         search_bind_dn: Option<String>,
@@ -144,7 +179,7 @@ impl VkLdapSettings {
             bind_db_prefix,
             bind_db_suffix,
             search_base,
-            search_scope,
+            search_scope: search_scope.into(),
             search_filter,
             search_attribute,
             search_bind_dn,
@@ -170,48 +205,69 @@ impl VkLdapContext {
             let mut tls_builder = &mut TlsConnector::builder();
 
             if let Some(path) = &settings.ca_cert_path {
-                let ca_cert_bytes = fs::read(path)?;
-                let ca_cert = Certificate::from_pem(&ca_cert_bytes)?;
+                let ca_cert_bytes =
+                    handle_io_error!(fs::read(path), "failed to read CA cert file".to_string());
+                let ca_cert = handle_tls_error!(
+                    Certificate::from_pem(&ca_cert_bytes),
+                    "failed to load CA certificate".to_string()
+                );
                 tls_builder = tls_builder.add_root_certificate(ca_cert);
             }
 
             if let Some(cert_path) = &settings.client_cert_path {
                 match &settings.client_key_path {
-                    None => return Err(VkLdapError::String("LDAP error: no TLS key path specified. Please set the path for ldap.tls_key_path config".to_string())),
+                    None => return Err(VkLdapError::NoTLSKeyPathSet),
                     Some(key_path) => {
-                        let cert_bytes = fs::read(cert_path)?;
-                        let key_bytes = fs::read(key_path)?;
-                        let client_cert = Identity::from_pkcs8(&cert_bytes, &key_bytes)?;
+                        let cert_bytes = handle_io_error!(
+                            fs::read(cert_path),
+                            "failed to read client certificate file".to_string()
+                        );
+                        let key_bytes = handle_io_error!(
+                            fs::read(key_path),
+                            "failed to read client key file".to_string()
+                        );
+                        let client_cert = handle_tls_error!(
+                            Identity::from_pkcs8(&cert_bytes, &key_bytes),
+                            "failed to load client certificate".to_string()
+                        );
                         tls_builder = tls_builder.identity(client_cert);
                     }
                 }
             }
 
-            let tls_connector = tls_builder.build()?;
+            let tls_connector = handle_tls_error!(
+                tls_builder.build(),
+                "failed to setup TLS connection".to_string()
+            );
 
             ldap_conn_settings = ldap_conn_settings.set_connector(tls_connector);
             ldap_conn_settings = ldap_conn_settings.set_starttls(settings.use_starttls);
         }
 
-        Ok(VkLdapContext {
-            ldap_conn: LdapConn::with_settings(ldap_conn_settings, url.as_str())?,
-            settings: settings,
-        })
+        match LdapConn::from_url_with_settings(ldap_conn_settings, url) {
+            Ok(ldap_conn) => Ok(VkLdapContext {
+                ldap_conn,
+                settings,
+            }),
+            Err(err) => Err(VkLdapError::LdapCreateContextError(err)),
+        }
     }
 
     fn bind(&mut self, user_dn: &str, password: &str) -> Result<()> {
-        let _ = self.ldap_conn.simple_bind(user_dn, password)?.success()?;
-        debug!("LDAP bind successful for user {user_dn}");
+        handle_ldap_error!(
+            self.ldap_conn.simple_bind(user_dn, password),
+            VkLdapError::LdapBindError
+        );
         Ok(())
     }
 
     fn search(&mut self, username: &str) -> Result<String> {
         if let Some(bind_dn) = &self.settings.search_bind_dn {
             if let Some(bind_passwd) = &self.settings.search_bind_passwd {
-                let _ = self
-                    .ldap_conn
-                    .simple_bind(&bind_dn, &bind_passwd)?
-                    .success()?;
+                handle_ldap_error!(
+                    self.ldap_conn.simple_bind(&bind_dn, &bind_passwd),
+                    VkLdapError::LdapAdminBindError
+                );
             }
         }
 
@@ -232,28 +288,22 @@ impl VkLdapContext {
 
         let search_filter = format!("(&({filter})({attribute}={username}))");
 
-        debug!("search user entry using the filter '{search_filter}'");
-
-        let (rs, _res) = self
-            .ldap_conn
-            .search(
+        let (rs, _res) = handle_ldap_error!(
+            self.ldap_conn.search(
                 base,
                 self.settings.search_scope,
                 search_filter.as_str(),
                 vec![&self.settings.search_dn_attribute],
-            )?
-            .success()?;
+            ),
+            VkLdapError::LdapSearchError
+        );
 
         if rs.len() == 0 {
-            return Err(VkLdapError::String(
-                "the LDAP search query did not return any entry".to_string(),
-            ));
+            return Err(VkLdapError::NoLdapEntryFound(search_filter));
         }
 
         if rs.len() > 1 {
-            return Err(VkLdapError::String(
-                "the LDAP search query did not return a single entry".to_string(),
-            ));
+            return Err(VkLdapError::MultipleEntryFound(search_filter));
         }
 
         let entry = rs
@@ -280,9 +330,7 @@ fn get_ldap_context(settings: VkLdapSettings) -> Result<VkLdapContext> {
     let url_opt = config.find_server();
     match url_opt {
         Some(url) => VkLdapContext::new(settings, url),
-        None => Err(VkLdapError::String(
-            "ERR no server set in configuration. Please set ldap.servers config.".to_string(),
-        )),
+        None => Err(VkLdapError::NoServerConfigured),
     }
 }
 
@@ -302,10 +350,4 @@ pub fn vk_ldap_search_and_bind(
     let mut ldap_ctx = get_ldap_context(settings)?;
     let user_dn = ldap_ctx.search(username)?;
     ldap_ctx.bind(user_dn.as_str(), password)
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {}
 }

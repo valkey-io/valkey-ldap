@@ -88,14 +88,6 @@ valkey_module! {
                 None
             ],
             [
-                "search_scope",
-                &*configs::LDAP_SEARCH_SCOPE,
-                "",
-                ConfigurationFlags::DEFAULT,
-                None,
-                None
-            ],
-            [
                 "search_filter",
                 &*configs::LDAP_SEARCH_FILTER,
                 "",
@@ -141,7 +133,8 @@ valkey_module! {
             ["auth_enabled", &*configs::LDAP_AUTH_ENABLED, true, ConfigurationFlags::DEFAULT, None],
         ],
         enum: [
-            ["auth_mode", &*configs::LDAP_AUTH_MODE, configs::LdapAuthMode::Bind, ConfigurationFlags::DEFAULT, None]
+            ["auth_mode", &*configs::LDAP_AUTH_MODE, configs::LdapAuthMode::Bind, ConfigurationFlags::DEFAULT, None],
+            ["search_scope", &*configs::LDAP_SEARCH_SCOPE, configs::LdapSearchScope::SubTree, ConfigurationFlags::DEFAULT, None],
         ],
         module_args_as_configuration: true,
     ]
