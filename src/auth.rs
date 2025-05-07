@@ -16,17 +16,18 @@ fn auth_reply_callback(
 ) -> Result<c_int, ValkeyError> {
     if let Some(res) = priv_data {
         match res {
-            Ok(_) => {
-                debug!("trying to authenticate with ACL: {username}");
-                match ctx.authenticate_client_with_acl_user(&username) {
-                    Status::Ok => {
-                        debug!("successfully authenticated LDAP user: {}", username);
-                        Ok(AUTH_HANDLED)
-                    }
-                    Status::Err => Err(ValkeyError::Str("Failed to authenticate with ACL")),
+            Ok(_) => match ctx.authenticate_client_with_acl_user(&username) {
+                Status::Ok => {
+                    debug!("successfully authenticated LDAP user {username}");
+                    Ok(AUTH_HANDLED)
                 }
+                Status::Err => Err(ValkeyError::Str("Failed to authenticate with ACL")),
+            },
+            Err(err) => {
+                debug!("failed to authenticate LDAP user {username}");
+                error!("{err}");
+                Ok(AUTH_NOT_HANDLED)
             }
-            Err(e) => Err(ValkeyError::from(e)),
         }
     } else {
         Err(ValkeyError::Str(
@@ -56,7 +57,7 @@ pub fn ldap_auth_blocking_callback(
         configs::get_bind_dn_prefix(ctx),
         configs::get_bind_dn_suffix(ctx),
         configs::get_search_base(ctx),
-        vkldap::from_string_to_scope(&configs::get_search_scope(ctx)),
+        configs::get_search_scope(ctx),
         configs::get_search_filter(ctx),
         configs::get_search_attribute(ctx),
         configs::get_search_bind_dn(ctx),

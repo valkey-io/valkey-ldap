@@ -25,7 +25,7 @@ docker exec -ti valkey valkey-cli config set ldap.bind_dn_suffix ",OU=devops,DC=
 docker exec -ti valkey valkey-cli ACL SETUSER user1 ON \>pass allcommands
 docker exec -ti valkey valkey-cli ACL SETUSER u2 ON \>pass allcommands
 
-docker exec -ti valkey valkey-cli config set ldap.auth_mode SearchAndBind
+docker exec -ti valkey valkey-cli config set ldap.auth_mode search+bind
 docker exec -ti valkey valkey-cli config set ldap.search_base "dc=valkey,dc=io"
 docker exec -ti valkey valkey-cli config set ldap.search_bind_dn "cn=admin,dc=valkey,dc=io"
 docker exec -ti valkey valkey-cli config set ldap.search_bind_passwd "admin123!"

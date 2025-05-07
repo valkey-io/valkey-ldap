@@ -7,25 +7,67 @@ use url::Url;
 use lazy_static::lazy_static;
 use valkey_module::{
     ConfigurationValue, Context, ValkeyError, ValkeyGILGuard, ValkeyString,
-    configuration::ConfigurationContext, enum_configuration,
+    configuration::ConfigurationContext,
 };
 
-enum_configuration! {
-    #[derive(PartialEq)]
-    pub enum LdapAuthMode {
-        Bind = 1,
-        SearchAndBind = 2,
+macro_rules! enum_configuration2 {
+    ($(#[$meta:meta])* $vis:vis enum $name:ident {
+        $($(#[$vmeta:meta])* $vname:ident = ($sname:expr, $val:expr),)*
+    }) => {
+        $(#[$meta])*
+        $vis enum $name {
+            $($(#[$vmeta])* $vname = $val,)*
+        }
+
+        impl std::convert::TryFrom<i32> for $name {
+            type Error = valkey_module::ValkeyError;
+
+            fn try_from(v: i32) -> Result<Self, Self::Error> {
+                match v {
+                    $(x if x == $name::$vname as i32 => Ok($name::$vname),)*
+                    _ => Err(valkey_module::ValkeyError::Str("Value is not supported")),
+                }
+            }
+        }
+
+        impl std::convert::From<$name> for i32 {
+            fn from(val: $name) -> Self {
+                val as i32
+            }
+        }
+
+        impl valkey_module::configuration::EnumConfigurationValue for $name {
+            fn get_options(&self) -> (Vec<String>, Vec<i32>) {
+                (vec![$($sname.to_string(),)*], vec![$($val,)*])
+            }
+        }
+
+        impl Clone for $name {
+            fn clone(&self) -> Self {
+                match self {
+                    $($name::$vname => $name::$vname,)*
+                }
+            }
+        }
     }
 }
 
-// enum_configuration! {
-//     #[derive(PartialEq)]
-//     pub enum LdapSearchScope {
-//         Base = 1,
-//         OneLevel = 2,
-//         SubTree = 3,
-//     }
-// }
+enum_configuration2! {
+    #[derive(PartialEq)]
+    pub enum LdapAuthMode {
+        Bind = ("bind", 1),
+        SearchAndBind = ("search+bind", 2),
+    }
+}
+
+enum_configuration2! {
+    #[derive(PartialEq)]
+    pub enum LdapSearchScope {
+        Base = ("base", 1),
+        OneLevel = ("one", 2),
+        SubTree = ("sub", 3),
+    }
+}
 
 lazy_static! {
     pub static ref LDAP_SERVER_LIST: ValkeyGILGuard<ValkeyString> =
@@ -46,8 +88,8 @@ lazy_static! {
         ValkeyGILGuard::new(LdapAuthMode::Bind);
     pub static ref LDAP_SEARCH_BASE: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
-    pub static ref LDAP_SEARCH_SCOPE: ValkeyGILGuard<ValkeyString> =
-        ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_SEARCH_SCOPE: ValkeyGILGuard<LdapSearchScope> =
+        ValkeyGILGuard::new(LdapSearchScope::SubTree);
     pub static ref LDAP_SEARCH_FILTER: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_SEARCH_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
@@ -152,9 +194,9 @@ pub fn get_search_base(ctx: &Context) -> Option<String> {
     }
 }
 
-pub fn get_search_scope(ctx: &Context) -> String {
+pub fn get_search_scope(ctx: &Context) -> LdapSearchScope {
     let search_scope = LDAP_SEARCH_SCOPE.lock(ctx);
-    search_scope.to_string()
+    search_scope.clone()
 }
 
 pub fn get_search_filter(ctx: &Context) -> Option<String> {
