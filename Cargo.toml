@@ -1,7 +1,7 @@
 [package]
 name = "valkey-ldap"
 authors = ["Ricardo Dias"]
-version = "0.1.0"
+version = "0.0.1-dev"
 edition = "2024"
 build = "build.rs"
 license = "BSD-3-Clause"
@@ -27,3 +27,4 @@ url = "2.5.4"
 log = "0.4.27"
 native-tls = "0.2.14"
 rand = "0.9.1"
+const-str = "0.6.2"
