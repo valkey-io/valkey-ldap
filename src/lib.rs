@@ -1,8 +1,10 @@
 mod auth;
 mod configs;
+mod version;
 mod vkldap;
 
 use auth::ldap_auth_blocking_callback;
+use version::module_version;
 
 use valkey_module::{
     Context, Status, ValkeyString, configuration::ConfigurationFlags,
@@ -19,7 +21,7 @@ fn initializer(_: &Context, _args: &[ValkeyString]) -> Status {
 
 valkey_module! {
     name: "ldap",
-    version: 1,
+    version: module_version(),
     allocator: (valkey_module::alloc::ValkeyAlloc, valkey_module::alloc::ValkeyAlloc),
     data_types: [],
     init: initializer,
