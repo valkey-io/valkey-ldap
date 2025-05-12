@@ -1,0 +1,130 @@
+%global cargo_install_lib 0
+%global upstream_version #[VERSION]
+%global valkey_modules_dir %{_libdir}/valkey/modules
+%global debug_package %{nil}
+
+Name:           #[PKG_NAME]
+Version:        #[RPM_VERSION]
+Release:        1%{dist}
+Summary:        LDAP authentication module for Valkey
+
+%if 0%{?fedora}
+SourceLicense:  BSD-3-Clause
+%endif
+License:        BSD-3-Clause
+
+URL:            https://github.com/rjd15372/valkey-ldap
+Source:         valkey-ldap-%{upstream_version}.tar.gz
+
+%if 0%{?fedora}
+BuildRequires:  cargo-rpm-macros >= 26
+%endif
+
+BuildRequires:  openssl-devel
+BuildRequires:  openldap-devel
+BuildRequires:  clang-devel
+BuildRequires:  wget
+
+Requires:       valkey >= 8.0
+
+%global _description %{expand:
+An LDAP authentication module for Valkey.}
+
+%description %{_description}
+
+%prep
+%autosetup -n valkey-ldap-%{upstream_version} -p1
+
+%if 0%{?fedora}
+%cargo_prep -v vendor
+
+%else
+
+# Install rust compiler
+wget https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init
+chmod +x rustup-init
+./rustup-init -y
+
+
+set -euo pipefail
+%{__mkdir} -p target/rpm
+/usr/bin/ln -s rpm target/release
+%{__rm} -rf .cargo/
+%{__mkdir} -p .cargo
+cat > .cargo/config.toml << EOF
+[build]
+rustc = "rustc"
+rustdoc = "rustdoc"
+
+[profile.rpm]
+inherits = "release"
+opt-level = 3
+codegen-units = 1
+debug = 2
+strip = "none"
+
+[env]
+CFLAGS = "%{build_cflags}"
+CXXFLAGS = "%{build_cxxflags}"
+LDFLAGS = "%{build_ldflags}"
+
+[install]
+root = "%{buildroot}%{_prefix}"
+
+[term]
+verbose = true
+
+[net]
+offline = true
+
+EOF
+
+cat >> .cargo/config.toml << EOF
+[source.vendored-sources]
+directory = "vendor"
+
+[source.crates-io]
+registry = "https://crates.io"
+replace-with = "vendored-sources"
+EOF
+%{__rm} -f Cargo.lock
+%endif
+
+%build
+
+%if 0%{?fedora}
+
+%cargo_build
+%{cargo_license} > LICENSE.dependencies
+
+%else
+
+. /builddir/.cargo/env
+
+cargo build %{?_smp_mflags} --profile rpm
+
+set -euo pipefail
+cargo tree                                                          \
+    --workspace                                                     \
+    --offline                                                       \
+    --edges no-build,no-dev,no-proc-macro                           \
+    --no-dedupe                                                     \
+    --target all                                                    \
+    --prefix none                                                   \
+    --format "{l}: {p}"                                             \
+    | sed -e "s: ($(pwd)[^)]*)::g" -e "s: / :/:g" -e "s:/: OR :g"   \
+    | sort -u                                                       \
+> LICENSE.dependencies
+
+%endif
+
+%install
+install -pDm755 target/rpm/libvalkey_ldap.so -t %{buildroot}%{valkey_modules_dir}
+
+%files
+%{valkey_modules_dir}/libvalkey_ldap.so
+%license LICENSE
+%license LICENSE.dependencies
+%doc README.md
+
+%changelog

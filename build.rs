@@ -21,13 +21,16 @@ fn copy_file_to_build_dir(from: &str) -> () {
 }
 
 fn main() {
-    Command::new("bash")
-        .arg("scripts/generate_test_certificates.sh")
-        .status()
-        .unwrap();
+    let profile = std::env::var("PROFILE").unwrap();
+    if &profile == "debug" {
+        Command::new("bash")
+            .arg("scripts/generate_test_certificates.sh")
+            .status()
+            .unwrap();
 
-    copy_file_to_build_dir("test/valkey.conf");
-    copy_file_to_build_dir("test/valkey-ldap-client.crt");
-    copy_file_to_build_dir("test/valkey-ldap-client.key");
-    copy_file_to_build_dir("scripts/docker/certs/valkey-ldap-ca.crt");
+        copy_file_to_build_dir("test/valkey.conf");
+        copy_file_to_build_dir("test/valkey-ldap-client.crt");
+        copy_file_to_build_dir("test/valkey-ldap-client.key");
+        copy_file_to_build_dir("scripts/docker/certs/valkey-ldap-ca.crt");
+    }
 }

@@ -1,4 +1,4 @@
-# ValkeyLDAP - Valkey LDAP authentication module  ![CI](https://github.com/rjd15372/valkey-ldap/actions/workflows/ci.yml/badge.svg)
+# ValkeyLDAP - Valkey LDAP authentication module  ![CI](https://github.com/rjd15372/valkey-ldap/actions/workflows/ci.yml/badge.svg) [![Copr Build Status](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/package/valkey-ldap-nightly/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/package/valkey-ldap-nightly/)
 
 The `valkey-ldap` module is a Rust based Valkey module that adds the support for handling user authentication against LDAP based identity providers.
 
@@ -63,6 +63,10 @@ This mode allows for significantly more flexibility in where the user objects ar
 | `ldap.search_attribute` | string | `"uid"` | The entry attribute used in search for matching the username specified in the `AUTH` command. |
 | `ldap.search_scope` | Enum(`base`, `one`, `sub`) | `sub` | The search scope. |
 | `ldap.search_dn_attribute` | string | `"entryDN"` | The attribute that contains the DN of the user entry. |
+
+## Installation
+
+We currently build RPMs for several distributions in the [valkey-ldap Copr project](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/).
 
 ## Development
 
