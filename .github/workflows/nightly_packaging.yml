@@ -1,0 +1,77 @@
+name: Nightly Packaging
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  Get_GIT_SHA:
+    name: Get commit SHA
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.sha.outputs.value }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Get SHA
+        id: sha
+        run: |
+          echo "value=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+  Create_RPM_Package:
+    name: Create RPM
+    needs: Get_GIT_SHA
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:41
+    steps:
+        - name: Checkout code
+          uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+        - name: Install dependencies
+          shell: bash
+          env:
+            COPR_LOGIN: ${{ secrets.COPR_LOGIN }}
+            COPR_USERNAME: ${{ secrets.COPR_USERNAME }}
+            COPR_TOKEN: ${{ secrets.COPR_TOKEN }}
+          run: |
+            yum install -y copr-cli cargo rpmbuild jq git
+            cat <<EOF > copr.config
+            [copr-cli]
+            login = ${COPR_LOGIN}
+            username = ${COPR_USERNAME}
+            token = ${COPR_TOKEN}
+            copr_url = https://copr.fedorainfracloud.org
+            EOF
+
+        - name: Check previous nightly build
+          id: should_build
+          shell: bash
+          env:
+            GIT_SHA: ${{ needs.Get_GIT_SHA.outputs.sha }}
+          run: |
+            LAST_VERSION=`copr-cli --config copr.config get-package --name=valkey-ldap-nightly valkey-ldap | jq -r .latest_succeeded_build.source_package.version`
+            LAST_SHA=`echo $LAST_VERSION | sed 's/[0-9\.\~dev]\++\([0-9a-z]\+\)-1/\1/g'`
+            echo "LAST_SHA=${LAST_SHA}  GIT_SHA=${GIT_SHA}"
+            if [ "$LAST_SHA" != "$GIT_SHA" ]; then
+              echo "value=true" >> $GITHUB_OUTPUT
+            fi
+
+        - name: Vendoring dependencies
+          if: steps.should_build.outputs.value == 'true'
+          run: |
+            cargo vendor
+
+        - name: Build SRPM
+          if: steps.should_build.outputs.value == 'true'
+          env:
+            GIT_SHA: ${{ needs.Get_GIT_SHA.outputs.sha }}
+          run: |
+            ./packaging/build_srpm.sh $GIT_SHA
+
+        - name: Trigger Copr Build
+          if: steps.should_build.outputs.value == 'true'
+          run : |
+            SRPM=`ls valkey-ldap*.rpm`
+            copr-cli --config copr.config build valkey-ldap $SRPM

@@ -6,6 +6,7 @@ venv
 scripts/docker/certs
 test/valkey-ldap-client.key
 test/valkey-ldap-client.crt
+vendor
 
 
 # Added by cargo
