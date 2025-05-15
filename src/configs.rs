@@ -114,7 +114,7 @@ pub fn ldap_server_list_set_callback(
         return Ok(());
     }
 
-    let urls = val_str.split(",");
+    let urls = val_str.split(" ");
     let mut url_list = LinkedList::new();
     for url_str in urls {
         let parse_res = Url::parse(url_str);
