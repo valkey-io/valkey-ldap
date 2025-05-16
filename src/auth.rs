@@ -3,7 +3,6 @@ use std::os::raw::c_int;
 use crate::configs;
 use crate::vkldap;
 use crate::vkldap::VkLdapError;
-use crate::vkldap::VkLdapSettings;
 
 use log::{debug, error};
 use valkey_module::{AUTH_HANDLED, AUTH_NOT_HANDLED, Context, Status, ValkeyError, ValkeyString};
@@ -49,22 +48,6 @@ pub fn ldap_auth_blocking_callback(
 
     debug!("starting authentication");
 
-    let settings = VkLdapSettings::new(
-        configs::is_starttls_enabled(ctx),
-        configs::get_tls_ca_cert_path(ctx),
-        configs::get_tls_cert_path(ctx),
-        configs::get_tls_key_path(ctx),
-        configs::get_bind_dn_prefix(ctx),
-        configs::get_bind_dn_suffix(ctx),
-        configs::get_search_base(ctx),
-        configs::get_search_scope(ctx),
-        configs::get_search_filter(ctx),
-        configs::get_search_attribute(ctx),
-        configs::get_search_bind_dn(ctx),
-        configs::get_search_bind_passwd(ctx),
-        configs::get_search_dn_attribute(ctx),
-    );
-
     let use_bind_mode = configs::is_bind_mode(ctx);
 
     let user_str = username.to_string();
@@ -75,9 +58,9 @@ pub fn ldap_auth_blocking_callback(
     std::thread::spawn(move || {
         let res;
         if use_bind_mode {
-            res = vkldap::vk_ldap_bind(settings, &user_str, &pass_str);
+            res = vkldap::vk_ldap_bind(&user_str, &pass_str);
         } else {
-            res = vkldap::vk_ldap_search_and_bind(settings, &user_str, &pass_str);
+            res = vkldap::vk_ldap_search_and_bind(&user_str, &pass_str);
         }
 
         if let Err(e) = blocked_client.set_blocked_private_data(res) {
