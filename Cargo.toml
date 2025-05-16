@@ -28,3 +28,5 @@ log = "0.4.27"
 native-tls = "0.2.14"
 rand = "0.9.1"
 const-str = "0.6.2"
+futures = "0.3.31"
+tokio = {version="1.45.0", features=["rt", "rt-multi-thread", "macros"]}

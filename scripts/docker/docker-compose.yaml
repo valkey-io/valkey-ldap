@@ -17,6 +17,23 @@ services:
     volumes:
         - ./certs:/container/service/slapd/assets/certs
 
+  ldap-2:
+    image: osixia/openldap:1.5.0
+    container_name: ldap-2
+    environment:
+        - LDAP_ORGANISATION=valkey
+        - LDAP_DOMAIN=valkey.io
+        - LDAP_BASE_DN=dc=valkey,dc=io
+        - LDAP_ADMIN_PASSWORD=admin123!
+        - LDAP_TLS_CRT_FILENAME=valkey-ldap.crt
+        - LDAP_TLS_KEY_FILENAME=valkey-ldap.key
+        - LDAP_TLS_CA_CRT_FILENAME=valkey-ldap-ca.crt
+    ports:
+        - 390:389
+        - 637:636
+    volumes:
+        - ./certs:/container/service/slapd/assets/certs
+
   valkey:
     build:
       dockerfile: Dockerfile-valkey-ldap

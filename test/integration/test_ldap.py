@@ -1,42 +1,19 @@
-from unittest import TestCase
+import time
 
-import valkey
 from valkey.exceptions import AuthenticationError
 
+from util import DOCKER_SERVICES, LdapTestCase
 
-class LdapModuleTest(TestCase):
+
+class LdapModuleTest(LdapTestCase):
     def setUp(self):
-        vk = valkey.Valkey(host="localhost", port=6379, db=0)
+        super(LdapModuleTest, self).setUp()
 
-        vk.execute_command("CONFIG", "SET", "ldap.auth_enabled", "yes")
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "bind")
 
-        # LDAP server location
-        vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://ldap")
-
-        # TLS configuration
-        vk.execute_command(
-            "CONFIG", "SET", "ldap.tls_ca_cert_path", "/valkey-ldap/valkey-ldap-ca.crt"
-        )
-        vk.execute_command(
-            "CONFIG", "SET", "ldap.tls_cert_path", "/valkey-ldap/valkey-ldap-client.crt"
-        )
-        vk.execute_command(
-            "CONFIG", "SET", "ldap.tls_key_path", "/valkey-ldap/valkey-ldap-client.key"
-        )
-        vk.execute_command("CONFIG", "SET", "ldap.use_starttls", "no")
-
-        vk.execute_command(
+        self.vk.execute_command(
             "CONFIG", "SET", "ldap.bind_dn_suffix", ",OU=devops,DC=valkey,DC=io"
         )
-
-        # Add user in Valkey
-        vk.execute_command("ACL", "SETUSER", "user1", "ON", ">pass", "allcommands")
-
-        self.vk = vk
-
-    def tearDown(self):
-        self.vk.close()
-        self.vk = None
 
     def test_ldap_no_server_error(self):
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "")
@@ -76,42 +53,17 @@ class LdapModuleTest(TestCase):
         self.assertTrue(resp.decode() == "user1")
 
 
-class LdapModuleBindAndSearchTest(TestCase):
+class LdapModuleBindAndSearchTest(LdapTestCase):
     def setUp(self):
-        vk = valkey.Valkey(host="localhost", port=6379, db=0)
+        super(LdapModuleBindAndSearchTest, self).setUp()
 
-        vk.execute_command("CONFIG", "SET", "ldap.auth_enabled", "yes")
-        vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "search+bind")
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "search+bind")
 
-        # LDAP server location
-        vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://ldap")
-
-        # TLS configuration
-        vk.execute_command(
-            "CONFIG", "SET", "ldap.tls_ca_cert_path", "/valkey-ldap/valkey-ldap-ca.crt"
-        )
-        vk.execute_command(
-            "CONFIG", "SET", "ldap.tls_cert_path", "/valkey-ldap/valkey-ldap-client.crt"
-        )
-        vk.execute_command(
-            "CONFIG", "SET", "ldap.tls_key_path", "/valkey-ldap/valkey-ldap-client.key"
-        )
-        vk.execute_command("CONFIG", "SET", "ldap.use_starttls", "no")
-
-        vk.execute_command("CONFIG", "SET", "ldap.search_base", "dc=valkey,dc=io")
-        vk.execute_command(
+        self.vk.execute_command("CONFIG", "SET", "ldap.search_base", "dc=valkey,dc=io")
+        self.vk.execute_command(
             "CONFIG", "SET", "ldap.search_bind_dn", "cn=admin,dc=valkey,dc=io"
         )
-        vk.execute_command("CONFIG", "SET", "ldap.search_bind_passwd", "admin123!")
-
-        # Add user in Valkey
-        vk.execute_command("ACL", "SETUSER", "u2", "ON", ">pass", "allcommands")
-
-        self.vk = vk
-
-    def tearDown(self):
-        self.vk.close()
-        self.vk = None
+        self.vk.execute_command("CONFIG", "SET", "ldap.search_bind_passwd", "admin123!")
 
     def test_ldap_auth(self):
         self.vk.execute_command("AUTH", "u2", "user2@123")
@@ -128,3 +80,64 @@ class LdapModuleBindAndSearchTest(TestCase):
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldaps://ldap")
         with self.assertRaises(AuthenticationError) as ctx:
             self.vk.execute_command("AUTH", "user2", "user2@123")
+
+
+class LdapModuleFailoverTest(LdapTestCase):
+    def setUp(self):
+        super(LdapModuleFailoverTest, self).setUp()
+
+        DOCKER_SERVICES.assert_all_services_running()
+
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "bind")
+
+        self.vk.execute_command(
+            "CONFIG", "SET", "ldap.bind_dn_suffix", ",OU=devops,DC=valkey,DC=io"
+        )
+
+    def test_ldap_auth(self):
+        self.vk.execute_command("AUTH", "user1", "user1@123")
+        resp = self.vk.execute_command("ACL", "WHOAMI")
+        self.assertTrue(resp.decode() == "user1")
+
+    def _wait_for_ldap_server_status(self, server_name, status_desc):
+        while True:
+            result = self.vk.execute_command("LDAP.STATUS")
+            self.assertTrue(len(result) == 2)
+            status = result[1]
+            self.assertTrue(len(status) == 4)
+            for i, r in enumerate(status):
+                if r.decode("utf-8") == server_name:
+                    if status[i + 1].decode("utf-8").startswith(status_desc):
+                        return
+                    break
+            time.sleep(2)
+
+    def test_auth_with_failover(self):
+        service = DOCKER_SERVICES.stop_service("ldap")
+        self._wait_for_ldap_server_status("ldap", "unhealthy")
+
+        self.vk.execute_command("AUTH", "user1", "user1@123")
+        resp = self.vk.execute_command("ACL", "WHOAMI")
+        self.assertTrue(resp.decode() == "user1")
+
+        DOCKER_SERVICES.restart_service(service)
+        self._wait_for_ldap_server_status("ldap", "healthy")
+
+    def test_auth_failure_and_recovery(self):
+        service = DOCKER_SERVICES.stop_service("ldap")
+        service2 = DOCKER_SERVICES.stop_service("ldap-2")
+        self._wait_for_ldap_server_status("ldap", "unhealthy")
+        self._wait_for_ldap_server_status("ldap-2", "unhealthy")
+
+        with self.assertRaises(AuthenticationError) as ctx:
+            self.vk.execute_command("AUTH", "user1", "user1@123")
+
+        DOCKER_SERVICES.restart_service(service)
+        self._wait_for_ldap_server_status("ldap", "healthy")
+
+        self.vk.execute_command("AUTH", "user1", "user1@123")
+        resp = self.vk.execute_command("ACL", "WHOAMI")
+        self.assertTrue(resp.decode() == "user1")
+
+        DOCKER_SERVICES.restart_service(service2)
+        self._wait_for_ldap_server_status("ldap-2", "healthy")

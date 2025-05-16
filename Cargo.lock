@@ -546,18 +546,18 @@ dependencies = [
 
 [[package]]
 name = "linkme"
-version = "0.3.32"
+version = "0.3.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22d227772b5999ddc0690e733f734f95ca05387e329c4084fe65678c51198ffe"
+checksum = "a1b1703c00b2a6a70738920544aa51652532cacddfec2e162d2e29eae01e665c"
 dependencies = [
  "linkme-impl",
 ]
 
 [[package]]
 name = "linkme-impl"
-version = "0.3.32"
+version = "0.3.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71a98813fa0073a317ed6a8055dcd4722a49d9b862af828ee68449adb799b6be"
+checksum = "04d55ca5d5a14363da83bf3c33874b8feaa34653e760d5216d7ef9829c88001a"
 dependencies = [
  "proc-macro2",
  "quote 1.0.40",
@@ -1108,9 +1108,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.44.2"
+version = "1.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
+checksum = "2513ca694ef9ede0fb23fe71a4ee4107cb102b9dc1930f6d0fd77aae068ae165"
 dependencies = [
  "backtrace",
  "bytes",
@@ -1207,12 +1207,14 @@ name = "valkey-ldap"
 version = "0.0.1-dev"
 dependencies = [
  "const-str",
+ "futures",
  "lazy_static",
  "ldap3",
  "log",
  "native-tls",
  "paste",
  "rand",
+ "tokio",
  "url",
  "valkey-module",
 ]
@@ -1243,9 +1245,9 @@ dependencies = [
 
 [[package]]
 name = "valkey-module-macros-internals"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "535809c7109709d640b7ba0a437757b07d5c73e6f1bb421666d6aea12528ac9c"
+checksum = "4aa70c7e56c9936901fd73bfc282c08e648191cf6ebe7f05c4a5af996529950c"
 dependencies = [
  "lazy_static",
  "proc-macro2",
