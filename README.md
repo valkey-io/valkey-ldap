@@ -1,4 +1,4 @@
-# ValkeyLDAP - Valkey LDAP authentication module  ![CI](https://github.com/rjd15372/valkey-ldap/actions/workflows/ci.yml/badge.svg) [![Copr Build Status](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/package/valkey-ldap-nightly/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/package/valkey-ldap-nightly/)
+# ValkeyLDAP - Valkey LDAP authentication module  ![CI](https://github.com/valkey-io/valkey-ldap/actions/workflows/ci.yml/badge.svg) [![Copr Build Status](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/package/valkey-ldap-nightly/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/package/valkey-ldap-nightly/)
 
 The `valkey-ldap` module is a Rust based Valkey module that adds the support for handling user authentication against LDAP based identity providers.
 
