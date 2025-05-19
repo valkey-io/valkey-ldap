@@ -13,7 +13,7 @@ SourceLicense:  BSD-3-Clause
 %endif
 License:        BSD-3-Clause
 
-URL:            https://github.com/rjd15372/valkey-ldap
+URL:            https://github.com/valkey-io/valkey-ldap
 Source:         valkey-ldap-%{upstream_version}.tar.gz
 
 %if 0%{?fedora}
