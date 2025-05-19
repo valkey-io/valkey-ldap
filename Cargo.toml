@@ -5,7 +5,7 @@ version = "0.0.1-dev"
 edition = "2024"
 build = "build.rs"
 license = "BSD-3-Clause"
-repository = "https://github.com/rjd15372/valkey-ldap"
+repository = "https://github.com/valkey-io/valkey-ldap"
 description = "An LDAP authentication module for Valkey"
 readme = "README.md"
 
