@@ -38,7 +38,7 @@ class Worker(Thread):
         )
 
 
-USAGE_STR = "Usage: python auth_requests.py [-(ldaps|starttls)] -n<num_auth_requests> -w<num_workers>"
+USAGE_STR = "Usage: python auth_requests.py [-(ldaps|starttls)] [-p<connection_pool_size>] -n<num_auth_requests> -w<num_workers>"
 
 
 def main():
@@ -50,6 +50,7 @@ def main():
     num_workers = None
     use_ldaps = False
     use_starttls = False
+    connection_pool_size = None
 
     for arg in sys.argv[1:]:
         if arg.startswith("-n"):
@@ -60,6 +61,8 @@ def main():
             use_ldaps = True
         elif arg == "-starttls":
             use_starttls = True
+        elif arg.startswith("-p"):
+            connection_pool_size = int(arg[2:])
         else:
             print(f"Error: invalid option {arg}")
             print(USAGE_STR)
@@ -87,6 +90,9 @@ def main():
         vk.execute_command("CONFIG", "SET", "ldap.use_starttls", "yes")
     else:
         vk.execute_command("CONFIG", "SET", "ldap.use_starttls", "no")
+
+    if connection_pool_size is not None:
+        vk.execute_command("CONFIG", "SET", "ldap.connection_pool_size", f"{connection_pool_size}")
 
     vk.execute_command(
         "CONFIG", "SET", "ldap.tls_ca_cert_path", "/valkey-ldap/valkey-ldap-ca.crt"

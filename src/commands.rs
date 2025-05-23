@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use log::error;
 use valkey_module::{
     Context, ValkeyError, ValkeyResult, ValkeyString, ValkeyValue, redisvalue::ValkeyValueKey,
 };
@@ -11,7 +12,15 @@ pub fn ldap_status_command(_ctx: &Context, args: Vec<ValkeyString>) -> ValkeyRes
         return Err(ValkeyError::WrongArity);
     }
 
-    let servers_health = get_servers_health_status();
+    let servers_health = match get_servers_health_status() {
+        Ok(servers) => servers,
+        Err(err) => {
+            error!("failed to get the list of servers: {err}");
+            return Err(ValkeyError::Str(
+                "Failed to get the list of LDAP servers. Check the logs for more details",
+            ));
+        }
+    };
 
     let mut map: BTreeMap<ValkeyValueKey, ValkeyValue> = BTreeMap::new();
 

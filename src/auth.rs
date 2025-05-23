@@ -1,6 +1,7 @@
 use std::os::raw::c_int;
 
 use log::{debug, error};
+use valkey_module::BlockedClient;
 use valkey_module::{AUTH_HANDLED, AUTH_NOT_HANDLED, Context, Status, ValkeyError, ValkeyString};
 
 use crate::configs;
@@ -24,7 +25,7 @@ fn auth_reply_callback(
             },
             Err(err) => {
                 debug!("failed to authenticate LDAP user {username}");
-                error!("{err}");
+                error!("LDAP authentication failure: {err}");
                 Ok(AUTH_NOT_HANDLED)
             }
         }
@@ -53,20 +54,27 @@ pub fn ldap_auth_blocking_callback(
     let user_str = username.to_string();
     let pass_str = password.to_string();
 
-    let mut blocked_client = ctx.block_client_on_auth(auth_reply_callback, Some(free_callback));
+    let blocked_client = ctx.block_client_on_auth(auth_reply_callback, Some(free_callback));
 
-    std::thread::spawn(move || {
-        let res;
-        if use_bind_mode {
-            res = vkldap::vk_ldap_bind(&user_str, &pass_str);
-        } else {
-            res = vkldap::vk_ldap_search_and_bind(&user_str, &pass_str);
-        }
-
-        if let Err(e) = blocked_client.set_blocked_private_data(res) {
+    let callback = move |blocked_client: Option<BlockedClient<Result<(), VkLdapError>>>, result| {
+        assert!(blocked_client.is_some());
+        let mut blocked_client = blocked_client.unwrap();
+        if let Err(e) = blocked_client.set_blocked_private_data(result) {
             error!("failed to set the auth callback result: {e}");
         }
-    });
+    };
 
-    Ok(AUTH_HANDLED)
+    let res = if use_bind_mode {
+        vkldap::vk_ldap_bind(user_str, pass_str, callback, blocked_client)
+    } else {
+        vkldap::vk_ldap_search_and_bind(user_str, pass_str, callback, blocked_client)
+    };
+
+    match res {
+        Ok(_) => Ok(AUTH_HANDLED),
+        Err(err) => {
+            error!("failed to submit ldap bind request: {err}");
+            Ok(AUTH_NOT_HANDLED)
+        }
+    }
 }

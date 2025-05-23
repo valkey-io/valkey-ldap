@@ -1,67 +1,93 @@
 mod connection;
 mod context;
 pub mod errors;
-mod failure_detector;
+pub mod failure_detector;
+pub mod scheduler;
 pub mod server;
 pub mod settings;
 
-use connection::VkLdapConnection;
-use context::VK_LDAP_CONTEXT;
 use errors::VkLdapError;
+use log::error;
+use scheduler::CallbackTrait;
 use server::VkLdapServer;
-use settings::VkLdapSettings;
+use settings::{VkConnectionSettings, VkLdapSettings};
 use url::Url;
 
 type Result<T> = std::result::Result<T, VkLdapError>;
 
-pub fn refresh_settings(settings: VkLdapSettings) {
-    VK_LDAP_CONTEXT.lock().unwrap().refresh_settings(settings);
+pub fn refresh_ldap_settings(settings: VkLdapSettings) {
+    if !scheduler::is_scheduler_ready() {
+        return ();
+    }
+
+    let res = scheduler::submit_sync_task(context::refresh_ldap_settings(settings));
+    if let Err(err) = res {
+        error!("refresh ldap settings returned an error: {err}");
+    }
 }
 
-pub fn clear_server_list() -> () {
-    VK_LDAP_CONTEXT.lock().unwrap().clear_server_list();
+pub fn refresh_connection_settings(settings: VkConnectionSettings) {
+    if !scheduler::is_scheduler_ready() {
+        return ();
+    }
+
+    let res = scheduler::submit_sync_task(context::refresh_connection_settings(settings));
+    if let Err(err) = res {
+        error!("refresh ldap settings returned an error: {err}");
+    }
 }
 
-pub fn add_server(server_url: Url) {
-    VK_LDAP_CONTEXT.lock().unwrap().add_server(server_url);
+pub fn clear_server_list() -> Result<()> {
+    if !scheduler::is_scheduler_ready() {
+        return Ok(());
+    }
+    scheduler::submit_sync_task(context::clear_server_list())
 }
 
-#[tokio::main]
-pub async fn vk_ldap_bind(username: &str, password: &str) -> Result<()> {
-    let settings = VK_LDAP_CONTEXT.lock().unwrap().get_settings_copy();
-    let prefix = &settings.bind_db_prefix;
-    let suffix = &settings.bind_db_suffix;
-    let user_dn = format!("{prefix}{username}{suffix}");
-    let mut ldap_ctx = VkLdapConnection::new(settings).await?;
-    let bind_res = ldap_ctx.bind(user_dn.as_str(), password).await;
-    ldap_ctx.close().await;
-    bind_res
+pub fn add_server(server_url: Url) -> Result<()> {
+    if !scheduler::is_scheduler_ready() {
+        return Ok(());
+    }
+    scheduler::submit_sync_task(context::add_server(server_url))
 }
 
-#[tokio::main]
-pub async fn vk_ldap_search_and_bind(username: &str, password: &str) -> Result<()> {
-    let settings = VK_LDAP_CONTEXT.lock().unwrap().get_settings_copy();
-    let mut ldap_ctx = VkLdapConnection::new(settings).await?;
-    let user_dn = ldap_ctx.search(username).await?;
-    let bind_res = ldap_ctx.bind(user_dn.as_str(), password).await;
-    ldap_ctx.close().await;
-    bind_res
+pub fn get_servers_health_status() -> Result<Vec<VkLdapServer>> {
+    if !scheduler::is_scheduler_ready() {
+        return Ok(Vec::new());
+    }
+
+    scheduler::submit_sync_task(context::get_servers_health_status())
 }
 
-pub fn get_servers_health_status() -> Vec<VkLdapServer> {
-    VK_LDAP_CONTEXT.lock().unwrap().get_current_servers()
+pub fn vk_ldap_bind<C, T>(username: String, password: String, callback: C, data: T) -> Result<()>
+where
+    T: 'static + Send,
+    C: CallbackTrait<T, Result<()>>,
+{
+    if !scheduler::is_scheduler_ready() {
+        return Ok(());
+    }
+
+    scheduler::submit_async_task(context::ldap_bind(username, password), callback, data)
 }
 
-pub fn start_ldap_failure_detector() {
-    VK_LDAP_CONTEXT
-        .lock()
-        .unwrap()
-        .start_ldap_failure_detector();
-}
+pub fn vk_ldap_search_and_bind<C, T>(
+    username: String,
+    password: String,
+    callback: C,
+    data: T,
+) -> Result<()>
+where
+    T: 'static + Send,
+    C: CallbackTrait<T, Result<()>>,
+{
+    if !scheduler::is_scheduler_ready() {
+        return Ok(());
+    }
 
-pub fn stop_ldap_failure_detector() -> Result<()> {
-    VK_LDAP_CONTEXT
-        .lock()
-        .unwrap()
-        .stop_failure_detector_thread()
+    scheduler::submit_async_task(
+        context::ldap_search_and_bind(username, password),
+        callback,
+        data,
+    )
 }

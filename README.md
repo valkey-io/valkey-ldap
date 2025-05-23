@@ -64,6 +64,13 @@ This mode allows for significantly more flexibility in where the user objects ar
 | `ldap.search_scope` | Enum(`base`, `one`, `sub`) | `sub` | The search scope. |
 | `ldap.search_dn_attribute` | string | `"entryDN"` | The attribute that contains the DN of the user entry. |
 
+### Advanced Options
+
+| Config Name | Type | Default | Description |
+| ------------|------|---------|-------------|
+| `ldap.connection_pool_size` | number | `2` | The number of connections available in each LDAP server's connection pool. |
+| `ldap.failure_detector_interval` | number | `1` | The number of seconds between each iteration of the failure detector. |
+
 ## Installation
 
 We currently build RPMs for several distributions in the [valkey-ldap Copr project](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/).

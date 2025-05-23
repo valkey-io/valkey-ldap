@@ -1,93 +1,84 @@
 use lazy_static::lazy_static;
-use std::{
-    sync::Mutex,
-    thread::{self, JoinHandle},
-};
+use std::sync::Arc;
 
-use log::{debug, info};
+use log::info;
+use tokio::sync::Mutex;
 use url::Url;
 
 use super::{
     Result,
+    connection::{VkConnectionPool, VkLdapConnection, VkLdapPoolConnection},
     errors::VkLdapError,
-    failure_detector,
     server::{VkLdapServer, VkLdapServerStatus},
-    settings::VkLdapSettings,
+    settings::{VkConnectionSettings, VkLdapSettings},
 };
 
-pub(super) struct VkLdapContext {
+struct VkLdapContext {
     servers: Vec<VkLdapServer>,
-    stop_failure_detector: bool,
-    detector_thread_handle: Option<thread::JoinHandle<()>>,
-    settings: VkLdapSettings,
+    conn_pools: Vec<Arc<VkConnectionPool>>,
+    ldap_settings: VkLdapSettings,
+    connection_settings: VkConnectionSettings,
 }
 
 impl VkLdapContext {
     fn new() -> VkLdapContext {
         VkLdapContext {
             servers: Vec::new(),
-            stop_failure_detector: false,
-            detector_thread_handle: None,
-            settings: VkLdapSettings::default(),
+            conn_pools: Vec::new(),
+            ldap_settings: VkLdapSettings::default(),
+            connection_settings: VkConnectionSettings::default(),
         }
     }
 
-    pub fn should_stop_failure_detector_thread(&self) -> bool {
-        self.stop_failure_detector
+    fn get_ldap_settings(&self) -> VkLdapSettings {
+        self.ldap_settings.clone()
     }
 
-    pub fn stop_failure_detector_thread(&mut self) -> Result<()> {
-        let handler_opt: Option<JoinHandle<()>>;
-        {
-            self.stop_failure_detector = true;
-            handler_opt = self.detector_thread_handle.take();
-        }
-
-        if let Some(handler) = handler_opt {
-            match handler.join() {
-                Ok(_) => Ok(()),
-                Err(_) => Err(VkLdapError::FailedToStopFailuredDetectorThread),
-            }
-        } else {
-            panic!("failure detector thread should have been initialized");
-        }
+    fn get_connection_settings(&self) -> VkConnectionSettings {
+        self.connection_settings.clone()
     }
 
-    pub fn start_ldap_failure_detector(&mut self) -> () {
-        self.detector_thread_handle = Some(thread::spawn(|| {
-            debug!("initiating failure detector thread");
-            failure_detector::failure_detector_loop();
-            debug!("shutting down failure detector thread");
-        }));
+    fn refresh_ldap_settings(&mut self, settings: VkLdapSettings) {
+        self.ldap_settings = settings
     }
 
-    pub fn get_settings_copy(&self) -> VkLdapSettings {
-        self.settings.clone()
+    fn refresh_connection_settings(&mut self, settings: VkConnectionSettings) {
+        self.connection_settings = settings;
     }
 
-    pub fn refresh_settings(&mut self, settings: VkLdapSettings) {
-        self.settings = settings
-    }
-
-    pub fn clear_server_list(&mut self) -> () {
+    fn clear_server_list(&mut self) -> Vec<Arc<VkConnectionPool>> {
         self.servers.clear();
+
+        let mut pools = Vec::with_capacity(self.conn_pools.len());
+        for pool in self.conn_pools.iter() {
+            pools.push(Arc::clone(pool));
+        }
+
+        self.conn_pools.clear();
+        pools
     }
 
-    pub fn add_server(&mut self, server_url: Url) -> () {
-        self.servers.push(VkLdapServer::new(
-            server_url,
-            self.servers.len(),
-            VkLdapServerStatus::HEALTHY,
-        ));
+    fn new_server(&self, server_url: Url) -> VkLdapServer {
+        let server_id = self.servers.len();
+        VkLdapServer::new(server_url, server_id, VkLdapServerStatus::HEALTHY)
     }
 
-    pub fn get_current_servers(&self) -> Vec<VkLdapServer> {
+    fn add_server(&mut self, server: VkLdapServer, pool: VkConnectionPool) {
+        self.servers.push(server);
+        self.conn_pools.push(Arc::new(pool));
+    }
+
+    fn get_connection_pool(&self, server: &VkLdapServer) -> Arc<VkConnectionPool> {
+        Arc::clone(&self.conn_pools[server.get_id()])
+    }
+
+    fn get_current_servers(&self) -> Vec<VkLdapServer> {
         let mut res: Vec<VkLdapServer> = Vec::new();
         self.servers.iter().for_each(|s| res.push(s.clone()));
         res
     }
 
-    pub fn update_server_status(&mut self, server: VkLdapServer, status: VkLdapServerStatus) {
+    fn update_server_status(&mut self, server: &VkLdapServer, status: VkLdapServerStatus) {
         if server.get_id() >= self.servers.len() {
             return ();
         }
@@ -102,10 +93,12 @@ impl VkLdapContext {
             let url = server.get_url_ref();
             info!("transition server {url} {pre_status} -> {status}");
             server.set_status(status);
+        } else {
+            server.set_status(status);
         }
     }
 
-    pub fn find_server(&self) -> Result<VkLdapServer> {
+    fn find_server(&self) -> Result<VkLdapServer> {
         if self.servers.is_empty() {
             return Err(VkLdapError::NoServerConfigured);
         }
@@ -118,40 +111,156 @@ impl VkLdapContext {
 
         Err(VkLdapError::NoHealthyServerAvailable)
     }
-
-    pub fn failover_server(
-        &mut self,
-        failed_server: VkLdapServer,
-        err: &VkLdapError,
-    ) -> Result<VkLdapServer> {
-        if self.servers.is_empty() {
-            // The server list was cleared in the meantime, no new server can be returned.
-            return Err(VkLdapError::NoServerConfigured);
-        }
-        let next_server_index = (failed_server.get_id() + 1) % self.servers.len();
-
-        if self.servers[failed_server.get_id()].is_healthy() {
-            if self.servers[failed_server.get_id()].get_url_ref() == failed_server.get_url_ref() {
-                // Mark the server unhealthy with the last error raised by the LDAP connection.
-                let url = failed_server.get_url_ref();
-                let err_msg = err.to_string();
-                info!("transition server {url} HEALTHY -> UNHEALTHY: {err_msg}");
-                self.servers[failed_server.get_id()]
-                    .set_status(VkLdapServerStatus::UNHEALTHY(err_msg));
-            }
-        }
-
-        for idx in next_server_index..self.servers.len() {
-            let new_server = &self.servers[idx];
-            if new_server.is_healthy() {
-                return Ok(new_server.clone());
-            }
-        }
-
-        Err(VkLdapError::NoHealthyServerAvailable)
-    }
 }
 
 lazy_static! {
-    pub(super) static ref VK_LDAP_CONTEXT: Mutex<VkLdapContext> = Mutex::new(VkLdapContext::new());
+    static ref VK_LDAP_CONTEXT: Mutex<VkLdapContext> = Mutex::new(VkLdapContext::new());
+}
+
+pub(super) async fn add_server(server_url: Url) {
+    let mut server;
+    let settings;
+    {
+        let ldap_ctx = VK_LDAP_CONTEXT.lock().await;
+        server = ldap_ctx.new_server(server_url);
+        settings = ldap_ctx.get_connection_settings();
+    }
+
+    let (pool, res) = VkConnectionPool::new(server.clone(), &settings).await;
+
+    if let Err(err) = res {
+        server.set_status(VkLdapServerStatus::UNHEALTHY(err.to_string()));
+    }
+
+    VK_LDAP_CONTEXT.lock().await.add_server(server, pool);
+}
+
+pub(super) async fn clear_server_list() {
+    let pools = VK_LDAP_CONTEXT.lock().await.clear_server_list();
+    tokio::spawn(async move {
+        for pool in pools.iter() {
+            pool.shutdown().await
+        }
+    });
+}
+
+pub async fn refresh_ldap_settings(settings: VkLdapSettings) {
+    VK_LDAP_CONTEXT.lock().await.refresh_ldap_settings(settings);
+}
+
+pub async fn refresh_connection_settings(settings: VkConnectionSettings) {
+    VK_LDAP_CONTEXT
+        .lock()
+        .await
+        .refresh_connection_settings(settings);
+
+    let servers = VK_LDAP_CONTEXT.lock().await.get_current_servers();
+
+    for server in servers {
+        refresh_pool_connections(&server).await
+    }
+}
+
+pub(super) async fn get_servers_health_status() -> Vec<VkLdapServer> {
+    VK_LDAP_CONTEXT.lock().await.get_current_servers()
+}
+
+pub(super) async fn get_connection(server: &VkLdapServer) -> Result<VkLdapConnection> {
+    let settings = VK_LDAP_CONTEXT.lock().await.get_connection_settings();
+    VkLdapConnection::new(&settings, &server).await
+}
+
+pub(super) async fn get_pool_connection(server: &VkLdapServer) -> VkLdapPoolConnection {
+    let pool = VK_LDAP_CONTEXT.lock().await.get_connection_pool(server);
+    pool.take_connection().await
+}
+
+pub(super) async fn return_pool_connection(pool_conn: VkLdapPoolConnection) {
+    let pool = VK_LDAP_CONTEXT
+        .lock()
+        .await
+        .get_connection_pool(&pool_conn.server);
+    pool.return_connection(pool_conn).await
+}
+
+pub(super) async fn update_server_status(server: &VkLdapServer, status: VkLdapServerStatus) {
+    VK_LDAP_CONTEXT
+        .lock()
+        .await
+        .update_server_status(server, status)
+}
+
+pub(super) async fn refresh_pool_connections(server: &VkLdapServer) {
+    let pool;
+    let settings;
+    {
+        let ldap_ctx = VK_LDAP_CONTEXT.lock().await;
+        pool = ldap_ctx.get_connection_pool(server);
+        settings = ldap_ctx.get_connection_settings();
+    }
+
+    match pool.refresh_connections(&settings).await {
+        Ok(_) => update_server_status(server, VkLdapServerStatus::HEALTHY).await,
+        Err(err) => {
+            update_server_status(server, VkLdapServerStatus::UNHEALTHY(err.to_string())).await
+        }
+    }
+}
+
+async fn run_ldap_op_with_failover<F>(ldap_op: F) -> Result<()>
+where
+    F: AsyncFn(&mut VkLdapConnection) -> Result<()>,
+{
+    loop {
+        let server;
+        let pool;
+        {
+            let ldap_ctx = VK_LDAP_CONTEXT.lock().await;
+            server = ldap_ctx.find_server()?;
+            pool = ldap_ctx.get_connection_pool(&server);
+        }
+
+        let mut pool_conn = pool.take_connection().await;
+
+        let op_res = ldap_op(&mut pool_conn.conn).await;
+
+        tokio::spawn(async move { pool.return_connection(pool_conn).await });
+
+        if let Err(err) = &op_res {
+            if let VkLdapError::LdapConnectionError(_) = err {
+                let err_msg = err.to_string();
+                update_server_status(&server, VkLdapServerStatus::UNHEALTHY(err_msg)).await;
+
+                continue;
+            }
+        }
+
+        return op_res;
+    }
+}
+
+pub(super) async fn ldap_bind(username: String, password: String) -> Result<()> {
+    let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
+
+    let prefix = settings.bind_db_prefix;
+    let suffix = settings.bind_db_suffix;
+    let user_dn = format!("{prefix}{username}{suffix}");
+
+    run_ldap_op_with_failover(async move |conn| {
+        conn.bind(user_dn.as_str(), password.as_str()).await
+    })
+    .await
+}
+
+pub(super) async fn ldap_search_and_bind(username: String, password: String) -> Result<()> {
+    let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
+
+    run_ldap_op_with_failover(async move |conn| {
+        let search_res = conn.search(&settings, username.as_str()).await;
+        match search_res {
+            Ok(user_dn) => conn.bind(user_dn.as_str(), password.as_str()).await,
+            Err(err) => Err(err),
+        }
+    })
+    .await
 }

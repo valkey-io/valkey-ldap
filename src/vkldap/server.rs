@@ -10,7 +10,7 @@ impl std::fmt::Display for VkLdapServerStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::HEALTHY => write!(f, "HEALTHY"),
-            Self::UNHEALTHY(msg) => write!(f, "UNHEALTHY: {msg}"),
+            Self::UNHEALTHY(msg) => write!(f, "UNHEALTHY: [{msg}]"),
         }
     }
 }
