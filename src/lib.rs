@@ -4,16 +4,16 @@ mod configs;
 mod version;
 mod vkldap;
 
+use valkey_module::{
+    Context, Status, ValkeyString, configuration::ConfigurationFlags,
+    logging::standard_log_implementation, valkey_module,
+};
+
 use auth::ldap_auth_blocking_callback;
 use commands::ldap_status_command;
 use log::debug;
 use version::module_version;
 use vkldap::{start_ldap_failure_detector, stop_ldap_failure_detector};
-
-use valkey_module::{
-    Context, Status, ValkeyString, configuration::ConfigurationFlags,
-    logging::standard_log_implementation, valkey_module,
-};
 
 fn initializer(_: &Context, _args: &[ValkeyString]) -> Status {
     let res = standard_log_implementation::setup();

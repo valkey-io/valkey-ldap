@@ -1,14 +1,15 @@
 use std::collections::LinkedList;
 
-use crate::vkldap::{VkLdapSettings, add_server, clear_server_list, refresh_settings};
-use log::debug;
-use url::Url;
-
 use lazy_static::lazy_static;
 use valkey_module::{
     ConfigurationValue, ValkeyError, ValkeyGILGuard, ValkeyLockIndicator, ValkeyString,
     configuration::ConfigurationContext,
 };
+
+use crate::vkldap;
+use crate::vkldap::settings::VkLdapSettings;
+use log::debug;
+use url::Url;
 
 macro_rules! enum_configuration2 {
     ($(#[$meta:meta])* $vis:vis enum $name:ident {
@@ -122,7 +123,7 @@ pub fn refresh_config_cache<G, T: ConfigurationValue<G>>(
         get_search_bind_passwd(ctx),
         get_search_dn_attribute(ctx),
     );
-    refresh_settings(settings);
+    vkldap::refresh_settings(settings);
 }
 
 pub fn ldap_server_list_set_callback(
@@ -133,7 +134,7 @@ pub fn ldap_server_list_set_callback(
     let val_str = value.get(config_ctx).to_string_lossy();
 
     if val_str.is_empty() {
-        clear_server_list();
+        vkldap::clear_server_list();
         return Ok(());
     }
 
@@ -147,10 +148,10 @@ pub fn ldap_server_list_set_callback(
         }
     }
 
-    clear_server_list();
+    vkldap::clear_server_list();
     for url in url_list {
-        debug!(target: "ldap::configs", "Adding server URL {url:?}");
-        add_server(url);
+        debug!("adding server URL {url:?}");
+        vkldap::add_server(url);
     }
 
     Ok(())

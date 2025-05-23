@@ -1,11 +1,11 @@
 use std::os::raw::c_int;
 
-use crate::configs;
-use crate::vkldap;
-use crate::vkldap::VkLdapError;
-
 use log::{debug, error};
 use valkey_module::{AUTH_HANDLED, AUTH_NOT_HANDLED, Context, Status, ValkeyError, ValkeyString};
+
+use crate::configs;
+use crate::vkldap;
+use crate::vkldap::errors::VkLdapError;
 
 fn auth_reply_callback(
     ctx: &Context,
