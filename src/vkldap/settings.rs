@@ -14,10 +14,6 @@ impl From<LdapSearchScope> for Scope {
 
 #[derive(Clone)]
 pub struct VkLdapSettings {
-    pub use_starttls: bool,
-    pub ca_cert_path: Option<String>,
-    pub client_cert_path: Option<String>,
-    pub client_key_path: Option<String>,
     pub bind_db_prefix: String,
     pub bind_db_suffix: String,
     pub search_base: Option<String>,
@@ -31,10 +27,6 @@ pub struct VkLdapSettings {
 
 impl VkLdapSettings {
     pub fn new(
-        use_starttls: bool,
-        ca_cert_path: Option<String>,
-        client_cert_path: Option<String>,
-        client_key_path: Option<String>,
         bind_db_prefix: String,
         bind_db_suffix: String,
         search_base: Option<String>,
@@ -46,10 +38,6 @@ impl VkLdapSettings {
         search_dn_attribute: String,
     ) -> Self {
         Self {
-            use_starttls,
-            ca_cert_path,
-            client_cert_path,
-            client_key_path,
             bind_db_prefix,
             bind_db_suffix,
             search_base,
@@ -66,10 +54,6 @@ impl VkLdapSettings {
 impl Default for VkLdapSettings {
     fn default() -> Self {
         Self {
-            use_starttls: Default::default(),
-            ca_cert_path: Default::default(),
-            client_cert_path: Default::default(),
-            client_key_path: Default::default(),
             bind_db_prefix: Default::default(),
             bind_db_suffix: Default::default(),
             search_base: Default::default(),
@@ -79,6 +63,45 @@ impl Default for VkLdapSettings {
             search_bind_dn: Default::default(),
             search_bind_passwd: Default::default(),
             search_dn_attribute: Default::default(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct VkConnectionSettings {
+    pub use_starttls: bool,
+    pub ca_cert_path: Option<String>,
+    pub client_cert_path: Option<String>,
+    pub client_key_path: Option<String>,
+    pub connection_pool_size: usize,
+}
+
+impl VkConnectionSettings {
+    pub fn new(
+        use_starttls: bool,
+        ca_cert_path: Option<String>,
+        client_cert_path: Option<String>,
+        client_key_path: Option<String>,
+        connection_pool_size: usize,
+    ) -> Self {
+        Self {
+            use_starttls,
+            ca_cert_path,
+            client_cert_path,
+            client_key_path,
+            connection_pool_size,
+        }
+    }
+}
+
+impl Default for VkConnectionSettings {
+    fn default() -> Self {
+        Self {
+            use_starttls: Default::default(),
+            ca_cert_path: Default::default(),
+            client_cert_path: Default::default(),
+            client_key_path: Default::default(),
+            connection_pool_size: 0,
         }
     }
 }

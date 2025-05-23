@@ -1,26 +1,204 @@
+use std::collections::VecDeque;
 use std::fs;
+use std::time::Duration;
 
+use ldap3::exop::WhoAmI;
 use ldap3::{Ldap, LdapConnAsync, LdapConnSettings, SearchEntry};
-use log::{debug, warn};
+use log::debug;
 use native_tls::{Certificate, Identity, TlsConnector};
+use tokio::sync::{Mutex, MutexGuard, Notify};
 use url::Url;
 
 use crate::{handle_io_error, handle_ldap_error, handle_tls_error};
 
 use super::Result;
-use super::context::VK_LDAP_CONTEXT;
 use super::errors::VkLdapError;
 use super::server::VkLdapServer;
-use super::settings::VkLdapSettings;
+use super::settings::{VkConnectionSettings, VkLdapSettings};
+
+struct ConnectionQueue {
+    queue: VecDeque<VkLdapConnection>,
+    epoch: u64,
+    size: usize,
+}
+
+impl ConnectionQueue {
+    fn new() -> ConnectionQueue {
+        ConnectionQueue {
+            queue: VecDeque::new(),
+            epoch: 0,
+            size: 0,
+        }
+    }
+
+    async fn close_connections(&mut self) {
+        for conn in self.queue.iter_mut() {
+            conn.close().await;
+        }
+        self.queue.clear();
+    }
+
+    async fn reset_connections(
+        &mut self,
+        server: &VkLdapServer,
+        settings: &VkConnectionSettings,
+    ) -> Result<()> {
+        self.close_connections().await;
+
+        self.epoch += 1;
+        self.size = settings.connection_pool_size;
+
+        for _ in 0..self.size {
+            match VkLdapConnection::new(&settings, server).await {
+                Ok(conn) => self.queue.push_front(conn),
+                Err(err) => {
+                    self.close_connections().await;
+                    return Err(err);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.queue.is_empty()
+    }
+
+    fn has_all_connections(&self) -> bool {
+        self.queue.len() == self.size
+    }
+
+    fn take(&mut self) -> (VkLdapConnection, u64) {
+        assert!(!self.is_empty());
+        (self.queue.pop_back().unwrap(), self.epoch)
+    }
+
+    fn put(&mut self, conn: VkLdapConnection) {
+        self.queue.push_front(conn);
+    }
+
+    fn get_epoch(&self) -> u64 {
+        self.epoch
+    }
+}
+
+pub(super) struct VkConnectionPool {
+    queue: Mutex<ConnectionQueue>,
+    signal: Notify,
+    server: VkLdapServer,
+}
+
+pub(super) struct VkLdapPoolConnection {
+    pub conn: VkLdapConnection,
+    pub server: VkLdapServer,
+    from_epoch: u64,
+}
+
+macro_rules! notify_wait {
+    ($notify:expr, $guard:expr) => {{
+        let fut = $notify.notified();
+        tokio::pin!(fut);
+        fut.as_mut().enable();
+
+        // Release the lock
+        let lock = MutexGuard::mutex(&$guard);
+        drop($guard);
+
+        fut.await;
+
+        // Re-acaquire the lock
+        lock.lock().await
+    }};
+}
+
+impl VkConnectionPool {
+    pub async fn new(
+        server: VkLdapServer,
+        settings: &VkConnectionSettings,
+    ) -> (VkConnectionPool, Result<()>) {
+        let mut c_queue = ConnectionQueue::new();
+        let res = c_queue.reset_connections(&server, settings).await;
+        (
+            VkConnectionPool {
+                queue: Mutex::new(c_queue),
+                signal: Notify::new(),
+                server,
+            },
+            res,
+        )
+    }
+
+    pub async fn refresh_connections(&self, settings: &VkConnectionSettings) -> Result<()> {
+        let mut queue = self.queue.lock().await;
+
+        queue.reset_connections(&self.server, settings).await?;
+
+        self.signal.notify_waiters();
+
+        Ok(())
+    }
+
+    pub async fn take_connection(&self) -> VkLdapPoolConnection {
+        let mut queue = self.queue.lock().await;
+
+        while queue.is_empty() {
+            queue = notify_wait!(self.signal, queue);
+        }
+
+        let (conn, epoch) = queue.take();
+        VkLdapPoolConnection {
+            conn,
+            server: self.server.clone(),
+            from_epoch: epoch,
+        }
+    }
+
+    pub async fn return_connection(&self, mut pool_conn: VkLdapPoolConnection) {
+        let mut queue = self.queue.lock().await;
+
+        if queue.get_epoch() == pool_conn.from_epoch {
+            queue.put(pool_conn.conn);
+            self.signal.notify_waiters();
+        } else {
+            pool_conn.conn.close().await;
+        }
+    }
+
+    pub async fn shutdown(&self) {
+        let mut queue = self.queue.lock().await;
+
+        while !queue.has_all_connections() {
+            queue = notify_wait!(self.signal, queue);
+        }
+
+        queue.close_connections().await
+    }
+}
 
 pub(super) struct VkLdapConnection {
     ldap_handler: Ldap,
-    settings: VkLdapSettings,
 }
 
 impl VkLdapConnection {
+    pub async fn new(settings: &VkConnectionSettings, server: &VkLdapServer) -> Result<Self> {
+        let url = server.get_url_ref();
+        debug!("creating LDAP connection to {url}");
+
+        let ldap_handler = Self::create_ldap_connection(&settings, url).await?;
+        Ok(VkLdapConnection { ldap_handler })
+    }
+
+    pub async fn ping(&mut self) -> Result<()> {
+        handle_ldap_error!(
+            self.ldap_handler.extended(WhoAmI).await,
+            VkLdapError::LdapServerPingError
+        );
+        Ok(())
+    }
+
     pub async fn create_ldap_connection(
-        settings: &VkLdapSettings,
+        settings: &VkConnectionSettings,
         server_url: &Url,
     ) -> Result<Ldap> {
         let mut ldap_conn_settings = LdapConnSettings::new();
@@ -69,6 +247,7 @@ impl VkLdapConnection {
 
             ldap_conn_settings = ldap_conn_settings.set_connector(tls_connector);
             ldap_conn_settings = ldap_conn_settings.set_starttls(settings.use_starttls);
+            ldap_conn_settings = ldap_conn_settings.set_conn_timeout(Duration::from_secs(5));
         }
 
         match LdapConnAsync::from_url_with_settings(ldap_conn_settings, &server_url).await {
@@ -80,47 +259,6 @@ impl VkLdapConnection {
         }
     }
 
-    pub async fn new(settings: VkLdapSettings) -> Result<Self> {
-        let mut server: VkLdapServer;
-        {
-            let config = VK_LDAP_CONTEXT.lock().unwrap();
-            server = config.find_server()?;
-        }
-
-        loop {
-            let url = server.get_url_ref();
-            debug!("creating LDAP connection to {url}");
-            match Self::create_ldap_connection(&settings, url).await {
-                Ok(ldap_handler) => {
-                    return Ok(VkLdapConnection {
-                        ldap_handler,
-                        settings,
-                    });
-                }
-                Err(err) => match err {
-                    VkLdapError::LdapConnectionError(_) => {
-                        let mut config = VK_LDAP_CONTEXT.lock().unwrap();
-                        let failover_server = config.failover_server(server, &err);
-
-                        match failover_server {
-                            Ok(new_server) => {
-                                let url = new_server.get_url_ref();
-                                warn!("failing over to server {url}");
-                                server = new_server;
-                            }
-                            Err(err) => {
-                                return Err(err);
-                            }
-                        };
-                    }
-                    _ => {
-                        return Err(err);
-                    }
-                },
-            }
-        }
-    }
-
     pub async fn bind(&mut self, user_dn: &str, password: &str) -> Result<()> {
         handle_ldap_error!(
             self.ldap_handler.simple_bind(user_dn, password).await,
@@ -129,9 +267,9 @@ impl VkLdapConnection {
         Ok(())
     }
 
-    pub async fn search(&mut self, username: &str) -> Result<String> {
-        if let Some(bind_dn) = &self.settings.search_bind_dn {
-            if let Some(bind_passwd) = &self.settings.search_bind_passwd {
+    pub async fn search(&mut self, settings: &VkLdapSettings, username: &str) -> Result<String> {
+        if let Some(bind_dn) = &settings.search_bind_dn {
+            if let Some(bind_passwd) = &settings.search_bind_passwd {
                 handle_ldap_error!(
                     self.ldap_handler.simple_bind(&bind_dn, &bind_passwd).await,
                     VkLdapError::LdapAdminBindError
@@ -140,17 +278,17 @@ impl VkLdapConnection {
         }
 
         let mut base = "";
-        if let Some(sbase) = &self.settings.search_base {
+        if let Some(sbase) = &settings.search_base {
             base = &sbase;
         }
 
         let mut filter = "objectClass=*";
-        if let Some(sfilter) = &self.settings.search_filter {
+        if let Some(sfilter) = &settings.search_filter {
             filter = &sfilter;
         }
 
         let mut attribute = "uid";
-        if let Some(sattribute) = &self.settings.search_attribute {
+        if let Some(sattribute) = &settings.search_attribute {
             attribute = &sattribute;
         }
 
@@ -160,9 +298,9 @@ impl VkLdapConnection {
             self.ldap_handler
                 .search(
                     base,
-                    self.settings.search_scope,
+                    settings.search_scope,
                     search_filter.as_str(),
-                    vec![&self.settings.search_dn_attribute],
+                    vec![&settings.search_dn_attribute],
                 )
                 .await,
             VkLdapError::LdapSearchError
@@ -182,7 +320,7 @@ impl VkLdapConnection {
             .expect("there should be one element in rs");
         let sentry = SearchEntry::construct(entry);
 
-        Ok(sentry.attrs[&self.settings.search_dn_attribute][0].clone())
+        Ok(sentry.attrs[&settings.search_dn_attribute][0].clone())
     }
 
     pub async fn close(&mut self) {

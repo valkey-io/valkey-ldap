@@ -6,9 +6,10 @@ use valkey_module::{
     configuration::ConfigurationContext,
 };
 
-use crate::vkldap;
+use crate::vkldap::failure_detector;
 use crate::vkldap::settings::VkLdapSettings;
-use log::debug;
+use crate::vkldap::{self, settings::VkConnectionSettings};
+use log::{debug, error};
 use url::Url;
 
 macro_rules! enum_configuration2 {
@@ -101,18 +102,16 @@ lazy_static! {
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_SEARCH_DN_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
+    pub static ref LDAP_CONNECTION_POOL_SIZE: ValkeyGILGuard<i64> = ValkeyGILGuard::new(2);
+    pub static ref LDAP_FAILURE_DETECTOR_INTERVAL: ValkeyGILGuard<i64> = ValkeyGILGuard::new(1);
 }
 
-pub fn refresh_config_cache<G, T: ConfigurationValue<G>>(
+pub fn refresh_ldap_settings_cache<G, T: ConfigurationValue<G>>(
     ctx: &ConfigurationContext,
     _name: &str,
     _val: &'static T,
 ) {
     let settings = VkLdapSettings::new(
-        is_starttls_enabled(ctx),
-        get_tls_ca_cert_path(ctx),
-        get_tls_cert_path(ctx),
-        get_tls_key_path(ctx),
         get_bind_dn_prefix(ctx),
         get_bind_dn_suffix(ctx),
         get_search_base(ctx),
@@ -123,7 +122,30 @@ pub fn refresh_config_cache<G, T: ConfigurationValue<G>>(
         get_search_bind_passwd(ctx),
         get_search_dn_attribute(ctx),
     );
-    vkldap::refresh_settings(settings);
+    vkldap::refresh_ldap_settings(settings);
+}
+
+pub fn refresh_connection_settings_cache<G, T: ConfigurationValue<G>>(
+    ctx: &ConfigurationContext,
+    _name: &str,
+    _val: &'static T,
+) {
+    let settings = VkConnectionSettings::new(
+        is_starttls_enabled(ctx),
+        get_tls_ca_cert_path(ctx),
+        get_tls_cert_path(ctx),
+        get_tls_key_path(ctx),
+        get_connection_pool_size(ctx),
+    );
+    vkldap::refresh_connection_settings(settings);
+}
+
+pub fn failure_detector_interval_changed<G, T: ConfigurationValue<G>>(
+    ctx: &ConfigurationContext,
+    _name: &str,
+    _val: &'static T,
+) {
+    failure_detector::set_failure_detector_interval(get_failure_detector_interval_secs(ctx));
 }
 
 pub fn ldap_server_list_set_callback(
@@ -134,8 +156,15 @@ pub fn ldap_server_list_set_callback(
     let val_str = value.get(config_ctx).to_string_lossy();
 
     if val_str.is_empty() {
-        vkldap::clear_server_list();
-        return Ok(());
+        return match vkldap::clear_server_list() {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                error!("clear server list returned an error: {err}");
+                Err(ValkeyError::Str(
+                    "Failed to set the LDAP servers. Check the logs for more details.",
+                ))
+            }
+        };
     }
 
     let urls = val_str.split(" ");
@@ -148,10 +177,23 @@ pub fn ldap_server_list_set_callback(
         }
     }
 
-    vkldap::clear_server_list();
+    let res = vkldap::clear_server_list();
+    if let Err(err) = res {
+        error!("clear server list returned an error: {err}");
+        return Err(ValkeyError::Str(
+            "Failed to set the LDAP servers. Check the logs for more details.",
+        ));
+    }
+
     for url in url_list {
         debug!("adding server URL {url:?}");
-        vkldap::add_server(url);
+        let res = vkldap::add_server(url);
+        if let Err(err) = res {
+            error!("add server returned an error: {err}");
+            return Err(ValkeyError::Str(
+                "Failed to set the LDAP servers. Check the logs for more details.",
+            ));
+        }
     }
 
     Ok(())
@@ -262,4 +304,14 @@ pub fn get_search_bind_passwd<T: ValkeyLockIndicator>(ctx: &T) -> Option<String>
 pub fn get_search_dn_attribute<T: ValkeyLockIndicator>(ctx: &T) -> String {
     let dn_attribute = LDAP_SEARCH_DN_ATTRIBUTE.lock(ctx);
     dn_attribute.to_string()
+}
+
+pub fn get_connection_pool_size<T: ValkeyLockIndicator>(ctx: &T) -> usize {
+    let pool_size = LDAP_CONNECTION_POOL_SIZE.lock(ctx);
+    *pool_size as usize
+}
+
+pub fn get_failure_detector_interval_secs<T: ValkeyLockIndicator>(ctx: &T) -> u64 {
+    let interval = LDAP_FAILURE_DETECTOR_INTERVAL.lock(ctx);
+    *interval as u64
 }

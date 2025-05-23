@@ -9,12 +9,17 @@ pub enum VkLdapError {
     LdapAdminBindError(LdapError),
     LdapSearchError(LdapError),
     LdapConnectionError(LdapError),
+    LdapServerPingError(LdapError),
     NoLdapEntryFound(String),
     MultipleEntryFound(String),
     NoServerConfigured,
     NoHealthyServerAvailable,
     FailedToStopFailuredDetectorThread,
+    FailedToShutdownJobScheduler,
+    FailedToSendJobToScheduler(String),
 }
+
+unsafe impl Send for VkLdapError {}
 
 impl std::fmt::Display for VkLdapError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -35,8 +40,12 @@ impl std::fmt::Display for VkLdapError {
                 write!(f, "failed to search ldap user: {ldaperr}")
             }
             VkLdapError::LdapConnectionError(ldaperr) => {
-                write!(f, "failed to establish an LDAP connection: {ldaperr}")
+                write!(f, "LDAP connection failure: {ldaperr}")
             }
+            VkLdapError::LdapServerPingError(ldaperr) => write!(
+                f,
+                "failed to run WhoAmI command on the ldap server: {ldaperr}"
+            ),
             VkLdapError::NoLdapEntryFound(filter) => {
                 write!(f, "search filter '{filter}' returned no entries")
             }
@@ -55,6 +64,13 @@ impl std::fmt::Display for VkLdapError {
                 f,
                 "failed to wait for the failure detector thread to finish"
             ),
+            VkLdapError::FailedToShutdownJobScheduler => write!(
+                f,
+                "failed to shutdown job scheduler. Please check the logs for more information"
+            ),
+            VkLdapError::FailedToSendJobToScheduler(errmsg) => {
+                write!(f, "failed to send job to scheduler: {errmsg}")
+            }
         }
     }
 }
@@ -62,6 +78,21 @@ impl std::fmt::Display for VkLdapError {
 impl From<&VkLdapError> for ValkeyError {
     fn from(err: &VkLdapError) -> Self {
         err.into()
+    }
+}
+
+impl VkLdapError {
+    pub(super) fn is_ldap_connection_error(err: &LdapError) -> bool {
+        match err {
+            LdapError::LdapResult { .. }
+            | LdapError::FilterParsing
+            | LdapError::DecodingUTF8
+            | LdapError::InvalidScopeString(_)
+            | LdapError::EndOfStream
+            | LdapError::AddNoValues
+            | LdapError::AdapterInit(_) => false,
+            _ => true,
+        }
     }
 }
 
@@ -93,7 +124,13 @@ macro_rules! handle_ldap_error {
                 Ok(res) => res,
                 Err(err) => return Err($errtype(err)),
             },
-            Err(err) => return Err($errtype(err)),
+            Err(err) => {
+                if VkLdapError::is_ldap_connection_error(&err) {
+                    return Err(VkLdapError::LdapConnectionError(err));
+                } else {
+                    return Err($errtype(err));
+                }
+            }
         }
     };
 }
