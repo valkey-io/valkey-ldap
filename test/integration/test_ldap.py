@@ -16,6 +16,13 @@ class LdapModuleTest(LdapTestCase):
             "CONFIG", "SET", "ldap.bind_dn_suffix", ",OU=devops,DC=valkey,DC=io"
         )
 
+    def test_ldap_module_unload_load(self):
+        self.test_ldap_auth()
+        self.vk.execute_command("MODULE", "UNLOAD", "ldap")
+        self.vk.execute_command("MODULE", "LOAD", "./libvalkey_ldap.so")
+        self.setUp()
+        self.test_ldap_auth()
+
     def test_ldap_no_server_error(self):
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "")
         with self.assertRaises(AuthenticationError) as ctx:
