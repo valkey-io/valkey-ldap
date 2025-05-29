@@ -16,10 +16,12 @@ use version::module_version;
 use vkldap::failure_detector;
 use vkldap::scheduler;
 
-fn initializer(_: &Context, _args: &[ValkeyString]) -> Status {
+fn initializer(ctx: &Context, _args: &[ValkeyString]) -> Status {
+    ctx.log_debug("initializing LDAP module");
+
     let res = standard_log_implementation::setup();
-    if let Err(_) = res {
-        return Status::Err;
+    if let Err(err) = res {
+        ctx.log_warning(format!("failed to setup log: {err}").as_str());
     }
 
     scheduler::start_job_scheduler();
@@ -28,11 +30,19 @@ fn initializer(_: &Context, _args: &[ValkeyString]) -> Status {
     Status::Ok
 }
 
-fn deinitializer(_: &Context) -> Status {
+fn deinitializer(ctx: &Context) -> Status {
+    ctx.log_debug("shutting down LDAP module");
+
     if let Err(err) = failure_detector::shutdown_failure_detector_thread() {
         error!("{err}");
         return Status::Err;
     }
+
+    if let Err(err) = vkldap::clear_server_list() {
+        error!("{err}");
+        return Status::Err;
+    }
+
     if let Err(err) = scheduler::stop_job_scheduler() {
         error!("{err}");
         return Status::Err;
