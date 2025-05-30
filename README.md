@@ -2,7 +2,7 @@
 
 The `valkey-ldap` module is a Rust based Valkey module that adds the support for handling user authentication against LDAP based identity providers.
 
-The module works by registering and authentication handler that intercepts the valkey `AUTH` command, which validates the the username and password, specified in the `AUTH` command, using an LDAP server. Therefore the user must already exist in Valkey before LDAP can be used for authentication.
+The module works by registering and authentication handler that intercepts the valkey `AUTH` command, which validates the username and password, specified in the `AUTH` command, using an LDAP server. Therefore the user must already exist in Valkey before LDAP can be used for authentication.
 
 ## LDAP Authentication Modes
 
