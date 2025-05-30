@@ -14,7 +14,7 @@ pub enum VkLdapError {
     MultipleEntryFound(String),
     NoServerConfigured,
     NoHealthyServerAvailable,
-    FailedToStopFailuredDetectorThread,
+    FailedToStopFailureDetectorThread,
     FailedToShutdownJobScheduler,
     FailedToSendJobToScheduler(String),
 }
@@ -60,7 +60,7 @@ impl std::fmt::Display for VkLdapError {
                 f,
                 "all servers set in configuration are unhealthy. Please check the logs for more information"
             ),
-            VkLdapError::FailedToStopFailuredDetectorThread => write!(
+            VkLdapError::FailedToStopFailureDetectorThread => write!(
                 f,
                 "failed to wait for the failure detector thread to finish"
             ),
