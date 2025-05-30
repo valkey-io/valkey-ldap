@@ -55,7 +55,7 @@ class LdapModuleTest(LdapTestCase):
         resp = self.vk.execute_command("ACL", "WHOAMI")
         self.assertTrue(resp.decode() == "user1")
 
-    def test_ldap_failed_auth_but_locally_successfull(self):
+    def test_ldap_failed_auth_but_locally_successful(self):
         self.vk.execute_command("AUTH", "user1", "pass")
         resp = self.vk.execute_command("ACL", "WHOAMI")
         self.assertTrue(resp.decode() == "user1")
