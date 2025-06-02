@@ -3,6 +3,7 @@ name: Nightly Packaging
 on:
   schedule:
     - cron: '0 2 * * *'
+  workflow_dispatch:
 
 jobs:
   Get_GIT_SHA:
