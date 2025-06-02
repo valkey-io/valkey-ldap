@@ -3,7 +3,7 @@ from threading import Thread
 
 from valkey.exceptions import AuthenticationError
 
-from util import DOCKER_SERVICES, LdapTestCase
+from util import DOCKER_SERVICES, LdapTestCase, valkey_map_to_python_map
 
 
 class LdapModuleTest(LdapTestCase):
@@ -110,14 +110,11 @@ class LdapModuleFailoverTest(LdapTestCase):
     def _wait_for_ldap_server_status(self, server_name, status_desc):
         while True:
             result = self.vk.execute_command("LDAP.STATUS")
-            self.assertTrue(len(result) == 2)
-            status = result[1]
-            self.assertTrue(len(status) == 4)
-            for i, r in enumerate(status):
-                if r.decode("utf-8") == server_name:
-                    if status[i + 1].decode("utf-8").startswith(status_desc):
-                        return
-                    break
+            status = valkey_map_to_python_map(result)
+
+            if status[server_name]["status"] == status_desc:
+                return
+
             time.sleep(2)
 
     def test_single_auth_with_failover(self):

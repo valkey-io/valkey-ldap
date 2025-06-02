@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use url::Url;
 
 #[derive(Clone)]
@@ -26,11 +28,17 @@ pub struct VkLdapServer {
     url: Url,
     id: usize,
     status: VkLdapServerStatus,
+    ping_time: Option<Duration>,
 }
 
 impl VkLdapServer {
     pub(super) fn new(url: Url, id: usize, status: VkLdapServerStatus) -> VkLdapServer {
-        VkLdapServer { url, id, status }
+        VkLdapServer {
+            url,
+            id,
+            status,
+            ping_time: None,
+        }
     }
 
     pub(super) fn get_url_ref(&self) -> &Url {
@@ -58,5 +66,13 @@ impl VkLdapServer {
 
     pub(super) fn set_status(&mut self, status: VkLdapServerStatus) {
         self.status = status
+    }
+
+    pub(super) fn set_ping_time(&mut self, ping_time: Option<Duration>) {
+        self.ping_time = ping_time
+    }
+
+    pub fn get_ping_time(&self) -> Option<Duration> {
+        self.ping_time
     }
 }

@@ -24,24 +24,43 @@ pub fn ldap_status_command(_ctx: &Context, args: Vec<ValkeyString>) -> ValkeyRes
 
     let mut map: BTreeMap<ValkeyValueKey, ValkeyValue> = BTreeMap::new();
 
-    let mut status_map: BTreeMap<ValkeyValueKey, ValkeyValue> = BTreeMap::new();
-
     for server in servers_health.iter() {
-        let status = match server.get_status() {
-            VkLdapServerStatus::HEALTHY => "healthy".to_string(),
-            VkLdapServerStatus::UNHEALTHY(err_msg) => format!("unhealthy: {err_msg}"),
+        let mut server_map: BTreeMap<ValkeyValueKey, ValkeyValue> = BTreeMap::new();
+
+        match server.get_status() {
+            VkLdapServerStatus::HEALTHY => {
+                server_map.insert(
+                    ValkeyValueKey::String("status".to_string()),
+                    ValkeyValue::BulkString("healthy".to_string()),
+                );
+                match server.get_ping_time() {
+                    Some(time) => {
+                        server_map.insert(
+                            ValkeyValueKey::String("ping_time(ms)".to_string()),
+                            ValkeyValue::Float(time.as_micros() as f64 / 1000.0),
+                        );
+                    }
+                    None => {}
+                }
+            }
+            VkLdapServerStatus::UNHEALTHY(err_msg) => {
+                server_map.insert(
+                    ValkeyValueKey::String("status".to_string()),
+                    ValkeyValue::BulkString("unhealthy".to_string()),
+                );
+                server_map.insert(
+                    ValkeyValueKey::String("error".to_string()),
+                    ValkeyValue::BulkString(err_msg),
+                );
+            }
         };
+
         let hostname = server.get_host_string();
-        status_map.insert(
+        map.insert(
             ValkeyValueKey::BulkValkeyString(ValkeyString::create(None, hostname)),
-            ValkeyValue::BulkString(status.to_string()),
+            ValkeyValue::OrderedMap(server_map),
         );
     }
-
-    map.insert(
-        ValkeyValueKey::BulkValkeyString(ValkeyString::create(None, "Servers_Health")),
-        ValkeyValue::OrderedMap(status_map),
-    );
 
     Ok(ValkeyValue::OrderedMap(map))
 }
