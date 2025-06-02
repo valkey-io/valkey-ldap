@@ -26,6 +26,23 @@ Once the user has been found in this search, the module re-binds to the LDAP dir
 
 This mode allows for significantly more flexibility in where the user objects are located in the directory, but will cause two additional requests to the LDAP server to be made.
 
+## Setting Up Valkey Users
+
+As mentioned before, this module requires that user accounts must exist in Valkey in order to authenticate LDAP users. This restriction is necessary because the ACL rules for each LDAP user are stored in the Valkey user account.
+
+For a user `bob` to be successfully authenticated by the LDAP module it must exist in the Valkey ALC database with the same username `bob`.
+
+We can create the Valkey user `bob` without a password, to prevent someone from trying to log in using `bob` account using the password-based authentication method.
+
+To create a user without a password we need to set the `resetpass` rule in the ACL rules list. Example:
+
+```
+ACL SET USER bob on resetpass +@hash
+```
+
+After creating the above user `bob` in Valkey, it will only be possible to authenticate user `bob` with a successful authentication from the LDAP module.
+
+
 ## Module Configuration
 
 ### General Options
