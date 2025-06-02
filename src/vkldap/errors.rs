@@ -21,6 +21,15 @@ pub enum VkLdapError {
 
 unsafe impl Send for VkLdapError {}
 
+fn ldap_error_to_string(ldap_err: &LdapError) -> String {
+    let msg = ldap_err.to_string();
+    // When using Active Directory LDAP API, some error messages might containing a
+    // trailing null character. Therefore, we are removing that null character to
+    // avoid panics when parsing the string.
+    //
+    msg.replace('\0', "")
+}
+
 impl std::fmt::Display for VkLdapError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -31,21 +40,28 @@ impl std::fmt::Display for VkLdapError {
             VkLdapError::IOError(msg, ioerr) => write!(f, "{msg}: {ioerr}"),
             VkLdapError::TLSError(msg, tlserr) => write!(f, "{msg}: {tlserr}"),
             VkLdapError::LdapBindError(ldaperr) => {
+                let ldaperr = ldap_error_to_string(ldaperr);
                 write!(f, "error in bind operation: {ldaperr}")
             }
             VkLdapError::LdapAdminBindError(ldaperr) => {
+                let ldaperr = ldap_error_to_string(ldaperr);
                 write!(f, "error in binding admin user: {ldaperr}")
             }
             VkLdapError::LdapSearchError(ldaperr) => {
+                let ldaperr = ldap_error_to_string(ldaperr);
                 write!(f, "failed to search ldap user: {ldaperr}")
             }
             VkLdapError::LdapConnectionError(ldaperr) => {
+                let ldaperr = ldap_error_to_string(ldaperr);
                 write!(f, "LDAP connection failure: {ldaperr}")
             }
-            VkLdapError::LdapServerPingError(ldaperr) => write!(
-                f,
-                "failed to run WhoAmI command on the ldap server: {ldaperr}"
-            ),
+            VkLdapError::LdapServerPingError(ldaperr) => {
+                let ldaperr = ldap_error_to_string(ldaperr);
+                write!(
+                    f,
+                    "failed to run WhoAmI command on the ldap server: {ldaperr}"
+                )
+            }
             VkLdapError::NoLdapEntryFound(filter) => {
                 write!(f, "search filter '{filter}' returned no entries")
             }
