@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures::future;
 use log::{debug, error};
@@ -17,13 +17,26 @@ async fn check_server_health(server: VkLdapServer) {
     if server.is_healthy() {
         let mut pool_conn = context::get_pool_connection(&server).await;
 
+        let now = Instant::now();
         let res = pool_conn.conn.ping().await;
+        let ping_time = now.elapsed();
 
         context::return_pool_connection(pool_conn).await;
 
         if let Err(err) = res {
-            context::update_server_status(&server, VkLdapServerStatus::UNHEALTHY(err.to_string()))
-                .await;
+            context::update_server_status(
+                &server,
+                VkLdapServerStatus::UNHEALTHY(err.to_string()),
+                None,
+            )
+            .await;
+        } else {
+            context::update_server_status(
+                &server,
+                super::server::VkLdapServerStatus::HEALTHY,
+                Some(ping_time),
+            )
+            .await;
         }
     } else {
         let conn_res = context::get_connection(&server).await;
@@ -39,6 +52,7 @@ async fn check_server_health(server: VkLdapServer) {
                 context::update_server_status(
                     &server,
                     VkLdapServerStatus::UNHEALTHY(err.to_string()),
+                    None,
                 )
                 .await;
             }

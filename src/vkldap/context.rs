@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use log::info;
 use tokio::sync::Mutex;
@@ -78,7 +78,12 @@ impl VkLdapContext {
         res
     }
 
-    fn update_server_status(&mut self, server: &VkLdapServer, status: VkLdapServerStatus) {
+    fn update_server_status(
+        &mut self,
+        server: &VkLdapServer,
+        status: VkLdapServerStatus,
+        ping_time: Option<Duration>,
+    ) {
         if server.get_id() >= self.servers.len() {
             return ();
         }
@@ -96,6 +101,8 @@ impl VkLdapContext {
         } else {
             server.set_status(status);
         }
+
+        server.set_ping_time(ping_time)
     }
 
     fn find_server(&self) -> Result<VkLdapServer> {
@@ -183,11 +190,15 @@ pub(super) async fn return_pool_connection(pool_conn: VkLdapPoolConnection) {
     pool.return_connection(pool_conn).await
 }
 
-pub(super) async fn update_server_status(server: &VkLdapServer, status: VkLdapServerStatus) {
+pub(super) async fn update_server_status(
+    server: &VkLdapServer,
+    status: VkLdapServerStatus,
+    ping_time: Option<Duration>,
+) {
     VK_LDAP_CONTEXT
         .lock()
         .await
-        .update_server_status(server, status)
+        .update_server_status(server, status, ping_time)
 }
 
 pub(super) async fn refresh_pool_connections(server: &VkLdapServer) {
@@ -200,9 +211,9 @@ pub(super) async fn refresh_pool_connections(server: &VkLdapServer) {
     }
 
     match pool.refresh_connections(&settings).await {
-        Ok(_) => update_server_status(server, VkLdapServerStatus::HEALTHY).await,
+        Ok(_) => update_server_status(server, VkLdapServerStatus::HEALTHY, None).await,
         Err(err) => {
-            update_server_status(server, VkLdapServerStatus::UNHEALTHY(err.to_string())).await
+            update_server_status(server, VkLdapServerStatus::UNHEALTHY(err.to_string()), None).await
         }
     }
 }
@@ -229,7 +240,7 @@ where
         if let Err(err) = &op_res {
             if let VkLdapError::LdapConnectionError(_) = err {
                 let err_msg = err.to_string();
-                update_server_status(&server, VkLdapServerStatus::UNHEALTHY(err_msg)).await;
+                update_server_status(&server, VkLdapServerStatus::UNHEALTHY(err_msg), None).await;
 
                 continue;
             }

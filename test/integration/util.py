@@ -59,3 +59,17 @@ class LdapTestCase(TestCase):
     def tearDown(self):
         self.vk.close()
         self.vk = None
+
+
+def valkey_map_to_python_map(valkey_map):
+    def _to_python_value(vk_value):
+        if isinstance(vk_value, list):
+            return valkey_map_to_python_map(vk_value)
+        else:
+            return vk_value.decode('utf-8')
+
+    python_map = {}
+    for i in range(0, len(valkey_map), 2) :
+        python_map[valkey_map[i].decode('utf-8')] = _to_python_value(valkey_map[i + 1])
+
+    return python_map
