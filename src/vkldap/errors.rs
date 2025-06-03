@@ -111,7 +111,6 @@ impl VkLdapError {
             | LdapError::FilterParsing
             | LdapError::DecodingUTF8
             | LdapError::InvalidScopeString(_)
-            | LdapError::EndOfStream
             | LdapError::AddNoValues
             | LdapError::AdapterInit(_) => false,
             _ => true,
