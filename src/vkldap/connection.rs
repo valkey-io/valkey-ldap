@@ -328,6 +328,10 @@ impl VkLdapConnection {
             .expect("there should be one element in rs");
         let sentry = SearchEntry::construct(entry);
 
+        if !sentry.attrs.contains_key(dn_attribute) {
+            return Err(VkLdapError::InvalidDNAttribute(dn_attribute.clone()));
+        }
+
         Ok(sentry.attrs[dn_attribute][0].clone())
     }
 
