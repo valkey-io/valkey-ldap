@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
 use std::{sync::Arc, time::Duration};
 
-use log::info;
+use log::{debug, info};
 use tokio::sync::Mutex;
 use url::Url;
 
@@ -242,6 +242,9 @@ where
                 let err_msg = err.to_string();
                 update_server_status(&server, VkLdapServerStatus::UNHEALTHY(err_msg), None).await;
 
+                debug!(
+                    "got connection error during ldap operation, failing over to other available server..."
+                );
                 continue;
             }
         }

@@ -47,7 +47,7 @@ pub fn ldap_auth_blocking_callback(
         return Ok(AUTH_NOT_HANDLED);
     }
 
-    debug!("starting authentication");
+    debug!("starting authentication for user={username}");
 
     let use_bind_mode = configs::is_bind_mode(ctx);
 
