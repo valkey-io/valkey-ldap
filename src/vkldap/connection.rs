@@ -260,6 +260,7 @@ impl VkLdapConnection {
     }
 
     pub async fn bind(&mut self, user_dn: &str, password: &str) -> Result<()> {
+        debug!("running ldap bind with DN='{user_dn}'");
         handle_ldap_error!(
             self.ldap_handler.simple_bind(user_dn, password).await,
             VkLdapError::LdapBindError
@@ -270,6 +271,7 @@ impl VkLdapConnection {
     pub async fn search(&mut self, settings: &VkLdapSettings, username: &str) -> Result<String> {
         if let Some(bind_dn) = &settings.search_bind_dn {
             if let Some(bind_passwd) = &settings.search_bind_passwd {
+                debug!("running ldap admin bind with DN='{bind_dn}'");
                 handle_ldap_error!(
                     self.ldap_handler.simple_bind(&bind_dn, &bind_passwd).await,
                     VkLdapError::LdapAdminBindError
@@ -293,14 +295,20 @@ impl VkLdapConnection {
         }
 
         let search_filter = format!("(&({filter})({attribute}={username}))");
+        let scope = settings.search_scope;
+        let dn_attribute = &settings.search_dn_attribute;
 
+        debug!(
+            "running ldap search with filter='{search_filter}' scope='{:?}' attribute='{dn_attribute}'",
+            scope
+        );
         let (rs, _res) = handle_ldap_error!(
             self.ldap_handler
                 .search(
                     base,
                     settings.search_scope,
                     search_filter.as_str(),
-                    vec![&settings.search_dn_attribute],
+                    vec![dn_attribute],
                 )
                 .await,
             VkLdapError::LdapSearchError
@@ -320,7 +328,7 @@ impl VkLdapConnection {
             .expect("there should be one element in rs");
         let sentry = SearchEntry::construct(entry);
 
-        Ok(sentry.attrs[&settings.search_dn_attribute][0].clone())
+        Ok(sentry.attrs[dn_attribute][0].clone())
     }
 
     pub async fn close(&mut self) {
