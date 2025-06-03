@@ -12,6 +12,7 @@ pub enum VkLdapError {
     LdapServerPingError(LdapError),
     NoLdapEntryFound(String),
     MultipleEntryFound(String),
+    InvalidDNAttribute(String),
     NoServerConfigured,
     NoHealthyServerAvailable,
     FailedToStopFailuredDetectorThread,
@@ -67,6 +68,12 @@ impl std::fmt::Display for VkLdapError {
             }
             VkLdapError::MultipleEntryFound(filter) => {
                 write!(f, "search filter '{filter}' returned multiple entries")
+            }
+            VkLdapError::InvalidDNAttribute(attribute) => {
+                write!(
+                    f,
+                    "the user entry does not have the '{attribute}' attribute to get the user DN"
+                )
             }
             VkLdapError::NoServerConfigured => write!(
                 f,
