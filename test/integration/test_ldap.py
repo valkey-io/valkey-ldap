@@ -67,11 +67,12 @@ class LdapModuleBindAndSearchTest(LdapTestCase):
 
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "search+bind")
 
-        self.vk.execute_command("CONFIG", "SET", "ldap.search_base", "dc=valkey,dc=io")
         self.vk.execute_command(
             "CONFIG", "SET", "ldap.search_bind_dn", "cn=admin,dc=valkey,dc=io"
         )
         self.vk.execute_command("CONFIG", "SET", "ldap.search_bind_passwd", "admin123!")
+
+        self.vk.execute_command("CONFIG", "SET", "ldap.search_base", "dc=valkey,dc=io")
 
     def test_ldap_auth(self):
         self.vk.execute_command("AUTH", "u2", "user2@123")
@@ -88,6 +89,10 @@ class LdapModuleBindAndSearchTest(LdapTestCase):
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldaps://ldap")
         with self.assertRaises(AuthenticationError) as ctx:
             self.vk.execute_command("AUTH", "user2", "user2@123")
+
+    def test_ldap_bind_password_hidden(self):
+        res = self.vk.execute_command("CONFIG", "GET", "ldap.search_bind_passwd")
+        self.assertEqual(res[1].decode("utf-8"), "*********")
 
 
 class LdapModuleFailoverTest(LdapTestCase):
