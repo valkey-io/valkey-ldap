@@ -6,7 +6,7 @@ mod vkldap;
 
 use log::error;
 use valkey_module::{
-    Context, Status, ValkeyString, configuration::ConfigurationFlags,
+    Context, Status, ValkeyGILGuard, ValkeyString, configuration::ConfigurationFlags,
     logging::standard_log_implementation, valkey_module,
 };
 
@@ -158,10 +158,11 @@ valkey_module! {
             ],
             [
                 "search_bind_passwd",
-                &*configs::LDAP_SEARCH_BIND_PASSWD,
+                &*configs::LDAP_SEARCH_BIND_SHADOW_PASSWD,
                 "",
-                ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_ldap_settings_cache))
+                ConfigurationFlags::SENSITIVE,
+                None,
+                Some(Box::new(configs::on_password_config_set::<ValkeyString, ValkeyGILGuard<ValkeyString>>))
             ],
             [
                 "search_dn_attribute",
