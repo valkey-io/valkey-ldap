@@ -35,9 +35,10 @@ pub const fn module_version() -> i32 {
     const PARTS: [&str; 3] = const_str::split!(MODULE_VERSION, ".");
     let major: i32 = const_str::parse!(PARTS[0], i32);
     let minor: i32 = const_str::parse!(PARTS[1], i32);
+    const IS_DEV: bool = const_str::contains!(PARTS[2], "-");
 
-    let (patch, dev) = if const_str::contains!(PARTS[2], "-") {
-        let patch_parts: [&str; 2] = const_str::split!(PARTS[2], "-");
+    let (patch, dev) = if IS_DEV {
+        let patch_parts = const_str::split!(PARTS[2], "-");
         let patch = const_str::parse!(patch_parts[0], i32);
         let dev = if const_str::equal!(patch_parts[1], "dev") {
             1
@@ -61,6 +62,6 @@ mod tests {
 
     #[test]
     fn test_version() {
-        assert_eq!(module_version(), 0x00000101);
+        assert_eq!(module_version(), 0x01000001);
     }
 }
