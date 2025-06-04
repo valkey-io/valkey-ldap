@@ -1,4 +1,5 @@
 use std::collections::LinkedList;
+use std::time::Duration;
 
 use lazy_static::lazy_static;
 use valkey_module::{
@@ -104,6 +105,8 @@ lazy_static! {
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_CONNECTION_POOL_SIZE: ValkeyGILGuard<i64> = ValkeyGILGuard::new(2);
     pub static ref LDAP_FAILURE_DETECTOR_INTERVAL: ValkeyGILGuard<i64> = ValkeyGILGuard::new(1);
+    pub static ref LDAP_TIMEOUT_CONNECTION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
+    pub static ref LDAP_TIMEOUT_LDAP_OPERATION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
 }
 
 lazy_static! {
@@ -122,6 +125,7 @@ pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
         get_search_bind_dn(ctx),
         get_search_bind_passwd(ctx),
         get_search_dn_attribute(ctx),
+        get_timeout_ldap_operation(ctx),
     );
     vkldap::refresh_ldap_settings(settings);
 }
@@ -133,6 +137,7 @@ pub fn refresh_connection_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
         get_tls_cert_path(ctx),
         get_tls_key_path(ctx),
         get_connection_pool_size(ctx),
+        get_timeout_connection(ctx),
     );
     vkldap::refresh_connection_settings(settings);
 }
@@ -342,4 +347,14 @@ pub fn get_connection_pool_size<T: ValkeyLockIndicator>(ctx: &T) -> usize {
 pub fn get_failure_detector_interval_secs<T: ValkeyLockIndicator>(ctx: &T) -> u64 {
     let interval = LDAP_FAILURE_DETECTOR_INTERVAL.lock(ctx);
     *interval as u64
+}
+
+pub fn get_timeout_connection<T: ValkeyLockIndicator>(ctx: &T) -> Duration {
+    let timeout = LDAP_TIMEOUT_CONNECTION.lock(ctx);
+    Duration::from_secs(*timeout as u64)
+}
+
+pub fn get_timeout_ldap_operation<T: ValkeyLockIndicator>(ctx: &T) -> Duration {
+    let timeout = LDAP_TIMEOUT_LDAP_OPERATION.lock(ctx);
+    Duration::from_secs(*timeout as u64)
 }

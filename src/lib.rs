@@ -90,6 +90,24 @@ valkey_module! {
                 std::i64::MAX,
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::failure_detector_interval_changed))
+            ],
+            [
+                "timeout_connection",
+                &*configs::LDAP_TIMEOUT_CONNECTION,
+                10,
+                0,
+                std::i64::MAX,
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_connection_setting_change))
+            ],
+            [
+                "timeout_ldap_operation",
+                &*configs::LDAP_TIMEOUT_LDAP_OPERATION,
+                10,
+                0,
+                std::i64::MAX,
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_ldap_setting_change))
             ]
         ],
         string: [

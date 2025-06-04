@@ -261,7 +261,12 @@ pub(super) async fn ldap_bind(username: String, password: String) -> Result<()> 
     let user_dn = format!("{prefix}{username}{suffix}");
 
     run_ldap_op_with_failover(async move |conn| {
-        conn.bind(user_dn.as_str(), password.as_str()).await
+        conn.bind(
+            user_dn.as_str(),
+            password.as_str(),
+            settings.timeout_ldap_operation,
+        )
+        .await
     })
     .await
 }
@@ -270,9 +275,22 @@ pub(super) async fn ldap_search_and_bind(username: String, password: String) -> 
     let settings = VK_LDAP_CONTEXT.lock().await.get_ldap_settings();
 
     run_ldap_op_with_failover(async move |conn| {
-        let search_res = conn.search(&settings, username.as_str()).await;
+        let search_res = conn
+            .search(
+                &settings,
+                username.as_str(),
+                settings.timeout_ldap_operation,
+            )
+            .await;
         match search_res {
-            Ok(user_dn) => conn.bind(user_dn.as_str(), password.as_str()).await,
+            Ok(user_dn) => {
+                conn.bind(
+                    user_dn.as_str(),
+                    password.as_str(),
+                    settings.timeout_ldap_operation,
+                )
+                .await
+            }
             Err(err) => Err(err),
         }
     })
