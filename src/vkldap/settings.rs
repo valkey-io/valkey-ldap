@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use ldap3::Scope;
 
 use crate::configs::LdapSearchScope;
@@ -23,6 +25,7 @@ pub struct VkLdapSettings {
     pub search_bind_dn: Option<String>,
     pub search_bind_passwd: Option<String>,
     pub search_dn_attribute: String,
+    pub timeout_ldap_operation: Duration,
 }
 
 impl VkLdapSettings {
@@ -36,6 +39,7 @@ impl VkLdapSettings {
         search_bind_dn: Option<String>,
         search_bind_passwd: Option<String>,
         search_dn_attribute: String,
+        timeout_ldap_operation: Duration,
     ) -> Self {
         Self {
             bind_db_prefix,
@@ -47,6 +51,7 @@ impl VkLdapSettings {
             search_bind_dn,
             search_bind_passwd,
             search_dn_attribute,
+            timeout_ldap_operation,
         }
     }
 }
@@ -63,6 +68,7 @@ impl Default for VkLdapSettings {
             search_bind_dn: Default::default(),
             search_bind_passwd: Default::default(),
             search_dn_attribute: Default::default(),
+            timeout_ldap_operation: Default::default(),
         }
     }
 }
@@ -74,6 +80,7 @@ pub struct VkConnectionSettings {
     pub client_cert_path: Option<String>,
     pub client_key_path: Option<String>,
     pub connection_pool_size: usize,
+    pub timeout_connection: Duration,
 }
 
 impl VkConnectionSettings {
@@ -83,6 +90,7 @@ impl VkConnectionSettings {
         client_cert_path: Option<String>,
         client_key_path: Option<String>,
         connection_pool_size: usize,
+        timeout_connection: Duration,
     ) -> Self {
         Self {
             use_starttls,
@@ -90,6 +98,7 @@ impl VkConnectionSettings {
             client_cert_path,
             client_key_path,
             connection_pool_size,
+            timeout_connection,
         }
     }
 }
@@ -102,6 +111,7 @@ impl Default for VkConnectionSettings {
             client_cert_path: Default::default(),
             client_key_path: Default::default(),
             connection_pool_size: 0,
+            timeout_connection: Default::default(),
         }
     }
 }

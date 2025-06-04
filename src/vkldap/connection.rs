@@ -247,8 +247,9 @@ impl VkLdapConnection {
 
             ldap_conn_settings = ldap_conn_settings.set_connector(tls_connector);
             ldap_conn_settings = ldap_conn_settings.set_starttls(settings.use_starttls);
-            ldap_conn_settings = ldap_conn_settings.set_conn_timeout(Duration::from_secs(5));
         }
+
+        ldap_conn_settings = ldap_conn_settings.set_conn_timeout(settings.timeout_connection);
 
         match LdapConnAsync::from_url_with_settings(ldap_conn_settings, &server_url).await {
             Ok((conn, handler)) => {
@@ -259,21 +260,32 @@ impl VkLdapConnection {
         }
     }
 
-    pub async fn bind(&mut self, user_dn: &str, password: &str) -> Result<()> {
+    pub async fn bind(&mut self, user_dn: &str, password: &str, timeout: Duration) -> Result<()> {
         debug!("running ldap bind with DN='{user_dn}'");
         handle_ldap_error!(
-            self.ldap_handler.simple_bind(user_dn, password).await,
+            self.ldap_handler
+                .with_timeout(timeout)
+                .simple_bind(user_dn, password)
+                .await,
             VkLdapError::LdapBindError
         );
         Ok(())
     }
 
-    pub async fn search(&mut self, settings: &VkLdapSettings, username: &str) -> Result<String> {
+    pub async fn search(
+        &mut self,
+        settings: &VkLdapSettings,
+        username: &str,
+        timeout: Duration,
+    ) -> Result<String> {
         if let Some(bind_dn) = &settings.search_bind_dn {
             if let Some(bind_passwd) = &settings.search_bind_passwd {
                 debug!("running ldap admin bind with DN='{bind_dn}'");
                 handle_ldap_error!(
-                    self.ldap_handler.simple_bind(&bind_dn, &bind_passwd).await,
+                    self.ldap_handler
+                        .with_timeout(timeout)
+                        .simple_bind(&bind_dn, &bind_passwd)
+                        .await,
                     VkLdapError::LdapAdminBindError
                 );
             }
@@ -304,6 +316,7 @@ impl VkLdapConnection {
         );
         let (rs, _res) = handle_ldap_error!(
             self.ldap_handler
+                .with_timeout(timeout)
                 .search(
                     base,
                     settings.search_scope,

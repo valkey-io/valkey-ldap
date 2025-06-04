@@ -87,6 +87,8 @@ After creating the above user `bob` in Valkey, it will only be possible to authe
 | ------------|------|---------|-------------|
 | `ldap.connection_pool_size` | number | `2` | The number of connections available in each LDAP server's connection pool. |
 | `ldap.failure_detector_interval` | number | `1` | The number of seconds between each iteration of the failure detector. |
+| `ldap.timeout_connection` | number | `10` | The number of seconds for to wait when connection to an LDAP server before timing out. |
+| `ldap.timeout_ldap_operation` | number | `10` | The number of seconds for to wait for an LDAP operation before timing out. |
 
 ## Installation
 
