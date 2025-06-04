@@ -111,23 +111,7 @@ lazy_static! {
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
 }
 
-pub fn on_password_config_set<G, T: ConfigurationValue<ValkeyString>>(
-    ctx: &ConfigurationContext,
-    name: &str,
-    val: &'static T,
-) -> Result<(), ValkeyError> {
-    LDAP_SEARCH_BIND_PASSWD.set(ctx, val.get(ctx))?;
-
-    refresh_ldap_settings_cache(ctx, name, val);
-
-    val.set(ctx, ValkeyString::create(None, "*********"))
-}
-
-pub fn refresh_ldap_settings_cache<G, T: ConfigurationValue<G>>(
-    ctx: &ConfigurationContext,
-    _name: &str,
-    _val: &'static T,
-) {
+pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
     let settings = VkLdapSettings::new(
         get_bind_dn_prefix(ctx),
         get_bind_dn_suffix(ctx),
@@ -142,11 +126,7 @@ pub fn refresh_ldap_settings_cache<G, T: ConfigurationValue<G>>(
     vkldap::refresh_ldap_settings(settings);
 }
 
-pub fn refresh_connection_settings_cache<G, T: ConfigurationValue<G>>(
-    ctx: &ConfigurationContext,
-    _name: &str,
-    _val: &'static T,
-) {
+pub fn refresh_connection_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
     let settings = VkConnectionSettings::new(
         is_starttls_enabled(ctx),
         get_tls_ca_cert_path(ctx),
@@ -157,22 +137,8 @@ pub fn refresh_connection_settings_cache<G, T: ConfigurationValue<G>>(
     vkldap::refresh_connection_settings(settings);
 }
 
-pub fn failure_detector_interval_changed<G, T: ConfigurationValue<G>>(
-    ctx: &ConfigurationContext,
-    _name: &str,
-    _val: &'static T,
-) {
-    failure_detector::set_failure_detector_interval(get_failure_detector_interval_secs(ctx));
-}
-
-pub fn ldap_server_list_set_callback(
-    config_ctx: &ConfigurationContext,
-    _: &str,
-    value: &'static ValkeyGILGuard<ValkeyString>,
-) -> Result<(), ValkeyError> {
-    let val_str = value.get(config_ctx).to_string_lossy();
-
-    if val_str.is_empty() {
+pub fn process_server_list(server_list: String) -> Result<(), ValkeyError> {
+    if server_list.is_empty() {
         return match vkldap::clear_server_list() {
             Ok(_) => Ok(()),
             Err(err) => {
@@ -184,7 +150,7 @@ pub fn ldap_server_list_set_callback(
         };
     }
 
-    let urls = val_str.split(" ");
+    let urls = server_list.split(" ");
     let mut url_list = LinkedList::new();
     for url_str in urls {
         let parse_res = Url::parse(url_str);
@@ -214,6 +180,51 @@ pub fn ldap_server_list_set_callback(
     }
 
     Ok(())
+}
+
+pub fn on_password_config_set<G, T: ConfigurationValue<ValkeyString>>(
+    ctx: &ConfigurationContext,
+    _name: &str,
+    val: &'static T,
+) -> Result<(), ValkeyError> {
+    LDAP_SEARCH_BIND_PASSWD.set(ctx, val.get(ctx))?;
+
+    refresh_ldap_settings_cache(ctx);
+
+    val.set(ctx, ValkeyString::create(None, "*********"))
+}
+
+pub fn on_ldap_setting_change<G, T: ConfigurationValue<G>>(
+    ctx: &ConfigurationContext,
+    _name: &str,
+    _val: &'static T,
+) {
+    refresh_ldap_settings_cache(ctx);
+}
+
+pub fn on_connection_setting_change<G, T: ConfigurationValue<G>>(
+    ctx: &ConfigurationContext,
+    _name: &str,
+    _val: &'static T,
+) {
+    refresh_connection_settings_cache(ctx);
+}
+
+pub fn failure_detector_interval_changed<G, T: ConfigurationValue<G>>(
+    ctx: &ConfigurationContext,
+    _name: &str,
+    _val: &'static T,
+) {
+    failure_detector::set_failure_detector_interval(get_failure_detector_interval_secs(ctx));
+}
+
+pub fn ldap_server_list_set_callback(
+    config_ctx: &ConfigurationContext,
+    _: &str,
+    value: &'static ValkeyGILGuard<ValkeyString>,
+) -> Result<(), ValkeyError> {
+    let val_str = value.get(config_ctx).to_string_lossy();
+    process_server_list(val_str)
 }
 
 pub fn get_bind_dn_prefix<T: ValkeyLockIndicator>(ctx: &T) -> String {
