@@ -27,6 +27,14 @@ fn initializer(ctx: &Context, _args: &[ValkeyString]) -> Status {
     scheduler::start_job_scheduler();
     failure_detector::start_failure_detector_thread();
 
+    configs::refresh_ldap_settings_cache(ctx);
+    configs::refresh_connection_settings_cache(ctx);
+
+    let server_list = configs::LDAP_SERVER_LIST.lock(ctx).to_string_lossy();
+    if let Err(err) = configs::process_server_list(server_list) {
+        ctx.log_warning(format!("failed to load server list: {err}").as_str());
+    }
+
     Status::Ok
 }
 
@@ -72,7 +80,7 @@ valkey_module! {
                 1,
                 8192,
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_connection_settings_cache))
+                Some(Box::new(configs::on_connection_setting_change))
             ],
             [
                 "failure_detector_interval",
@@ -98,63 +106,63 @@ valkey_module! {
                 &*configs::LDAP_BIND_DN_PREFIX,
                 "cn=",
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_ldap_settings_cache))
+                Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
                 "bind_dn_suffix",
                 &*configs::LDAP_BIND_DN_SUFFIX,
                 "",
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_ldap_settings_cache))
+                Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
                 "tls_ca_cert_path",
                 &*configs::LDAP_TLS_CA_CERT_PATH,
                 "",
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_connection_settings_cache))
+                Some(Box::new(configs::on_connection_setting_change))
             ],
             [
                 "tls_cert_path",
                 &*configs::LDAP_TLS_CERT_PATH,
                 "",
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_connection_settings_cache))
+                Some(Box::new(configs::on_connection_setting_change))
             ],
             [
                 "tls_key_path",
                 &*configs::LDAP_TLS_KEY_PATH,
                 "",
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_connection_settings_cache))
+                Some(Box::new(configs::on_connection_setting_change))
             ],
             [
                 "search_base",
                 &*configs::LDAP_SEARCH_BASE,
                 "",
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_ldap_settings_cache))
+                Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
                 "search_filter",
                 &*configs::LDAP_SEARCH_FILTER,
                 "objectClass=*",
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_ldap_settings_cache))
+                Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
                 "search_attribute",
                 &*configs::LDAP_SEARCH_ATTRIBUTE,
                 "uid",
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_ldap_settings_cache))
+                Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
                 "search_bind_dn",
                 &*configs::LDAP_SEARCH_BIND_DN,
                 "",
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_ldap_settings_cache))
+                Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
                 "search_bind_passwd",
@@ -169,7 +177,7 @@ valkey_module! {
                 &*configs::LDAP_SEARCH_DN_ATTRIBUTE,
                 "entryDN",
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_ldap_settings_cache))
+                Some(Box::new(configs::on_ldap_setting_change))
             ],
         ],
         bool: [
@@ -178,7 +186,7 @@ valkey_module! {
                 &*configs::LDAP_USE_STARTTLS,
                 false,
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_connection_settings_cache))
+                Some(Box::new(configs::on_connection_setting_change))
             ],
             [
                 "auth_enabled",
@@ -201,9 +209,9 @@ valkey_module! {
                 &*configs::LDAP_SEARCH_SCOPE,
                 configs::LdapSearchScope::SubTree,
                 ConfigurationFlags::DEFAULT,
-                Some(Box::new(configs::refresh_ldap_settings_cache))
+                Some(Box::new(configs::on_ldap_setting_change))
             ],
         ],
-        module_args_as_configuration: true,
+        module_args_as_configuration: false,
     ]
 }

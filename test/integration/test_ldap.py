@@ -1,14 +1,45 @@
 import time
+from unittest import TestCase
 from threading import Thread
 
-from valkey.exceptions import AuthenticationError
+from valkey.exceptions import AuthenticationError, ConnectionError
+import valkey
 
 from util import DOCKER_SERVICES, LdapTestCase, valkey_map_to_python_map
 
 
-class LdapModuleTest(LdapTestCase):
+class LdapModuleTest(TestCase):
+    def test_config_load_from_file(self):
+        srv = DOCKER_SERVICES.stop_service("valkey")
+        DOCKER_SERVICES.restart_service(srv)
+        res = None
+        while res is None:
+            try:
+                vk = valkey.Valkey(host="localhost", port=6379, db=0, socket_timeout=30)
+                res = vk.execute_command("CONFIG", "GET", "ldap.servers")
+            except ConnectionError:
+                time.sleep(1)
+
+        self.assertEqual(res[1].decode("utf-8"), "ldap://ldap ldap://ldap-2")
+
+    def test_configs_after_reload(self):
+        vk = valkey.Valkey(host="localhost", port=6379, db=0, socket_timeout=30)
+
+        vk.execute_command("MODULE", "UNLOAD", "ldap")
+        vk.execute_command("MODULE", "LOAD", "./libvalkey_ldap.so")
+
+        res = vk.execute_command("CONFIG", "GET", "ldap.servers")
+        # The default behavior of Valkey is that configurations set in valkey.conf
+        # are only loaded in the first time the module is loaded. If we reload the
+        # module without restarting valkey-server, then the configuration options
+        # will have their default values.
+        #
+        self.assertEqual(res[1].decode("utf-8"), "")
+
+
+class LdapModuleBindTest(LdapTestCase):
     def setUp(self):
-        super(LdapModuleTest, self).setUp()
+        super(LdapModuleBindTest, self).setUp()
 
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "bind")
 
