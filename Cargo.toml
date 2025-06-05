@@ -30,3 +30,5 @@ rand = "0.9.1"
 const-str = "0.6.2"
 futures = "0.3.31"
 tokio = {version="1.45.0", features=["rt", "rt-multi-thread", "macros"]}
+valkey-module-macros = "0.1.9"
+linkme = "0.3.33"

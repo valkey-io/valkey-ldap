@@ -41,19 +41,12 @@ impl VkLdapServer {
         }
     }
 
-    pub(super) fn get_url_ref(&self) -> &Url {
+    pub fn get_url_ref(&self) -> &Url {
         &self.url
     }
 
     pub(super) fn get_id(&self) -> usize {
         self.id
-    }
-
-    pub fn get_host_string(&self) -> String {
-        match self.url.host() {
-            Some(host) => host.to_string(),
-            None => self.url.to_string(),
-        }
     }
 
     pub(super) fn is_healthy(&self) -> bool {

@@ -1,16 +1,12 @@
-use std::collections::BTreeMap;
-
 use log::error;
-use valkey_module::{
-    Context, ValkeyError, ValkeyResult, ValkeyString, ValkeyValue, redisvalue::ValkeyValueKey,
-};
+use valkey_module::{InfoContext, ValkeyError, ValkeyResult};
+use valkey_module_macros::info_command_handler;
 
 use crate::vkldap::{get_servers_health_status, server::VkLdapServerStatus};
 
-pub fn ldap_status_command(_ctx: &Context, args: Vec<ValkeyString>) -> ValkeyResult {
-    if args.len() > 1 {
-        return Err(ValkeyError::WrongArity);
-    }
+#[info_command_handler]
+fn add_ldap_status_section(ctx: &InfoContext, _for_crash_report: bool) -> ValkeyResult<()> {
+    let mut builder = ctx.builder().add_section("status");
 
     let servers_health = match get_servers_health_status() {
         Ok(servers) => servers,
@@ -22,45 +18,35 @@ pub fn ldap_status_command(_ctx: &Context, args: Vec<ValkeyString>) -> ValkeyRes
         }
     };
 
-    let mut map: BTreeMap<ValkeyValueKey, ValkeyValue> = BTreeMap::new();
-
-    for server in servers_health.iter() {
-        let mut server_map: BTreeMap<ValkeyValueKey, ValkeyValue> = BTreeMap::new();
+    for (idx, server) in servers_health.iter().enumerate() {
+        let mut dict = builder
+            .add_dictionary(format!("server_{}", idx).as_str())
+            .field("url", server.get_url_ref().as_str())?;
 
         match server.get_status() {
             VkLdapServerStatus::HEALTHY => {
-                server_map.insert(
-                    ValkeyValueKey::String("status".to_string()),
-                    ValkeyValue::BulkString("healthy".to_string()),
-                );
+                dict = dict.field("status", "healthy")?;
+
                 match server.get_ping_time() {
                     Some(time) => {
-                        server_map.insert(
-                            ValkeyValueKey::String("ping_time(ms)".to_string()),
-                            ValkeyValue::Float(time.as_micros() as f64 / 1000.0),
-                        );
+                        dict = dict.field(
+                            "ping_time(ms)",
+                            (time.as_micros() as f64 / 1000.0).to_string(),
+                        )?;
                     }
                     None => {}
                 }
             }
             VkLdapServerStatus::UNHEALTHY(err_msg) => {
-                server_map.insert(
-                    ValkeyValueKey::String("status".to_string()),
-                    ValkeyValue::BulkString("unhealthy".to_string()),
-                );
-                server_map.insert(
-                    ValkeyValueKey::String("error".to_string()),
-                    ValkeyValue::BulkString(err_msg),
-                );
+                dict = dict.field("status", "unhealthy")?;
+                dict = dict.field("error", err_msg.as_str())?;
             }
         };
 
-        let hostname = server.get_host_string();
-        map.insert(
-            ValkeyValueKey::BulkValkeyString(ValkeyString::create(None, hostname)),
-            ValkeyValue::OrderedMap(server_map),
-        );
+        builder = dict.build_dictionary()?;
     }
 
-    Ok(ValkeyValue::OrderedMap(map))
+    builder.build_section()?.build_info()?;
+
+    Ok(())
 }
