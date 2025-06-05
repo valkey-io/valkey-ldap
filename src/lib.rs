@@ -11,7 +11,6 @@ use valkey_module::{
 };
 
 use auth::ldap_auth_blocking_callback;
-use commands::ldap_status_command;
 use version::module_version;
 use vkldap::failure_detector;
 use vkldap::scheduler;
@@ -68,9 +67,7 @@ valkey_module! {
     auth: [
         ldap_auth_blocking_callback
     ],
-    commands: [
-        ["ldap.status", ldap_status_command, "readonly", 0, 0, 0],
-    ],
+    commands: [],
     configurations: [
         i64: [
             [

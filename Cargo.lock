@@ -961,6 +961,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_syn"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e0ca8adcbd02c69d24859f7f0c54ede988e4509c8767c8a3185ec0eb158281c"
+dependencies = [
+ "bitflags 1.3.2",
+ "proc-macro2",
+ "serde",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1210,6 +1222,7 @@ dependencies = [
  "futures",
  "lazy_static",
  "ldap3",
+ "linkme",
  "log",
  "native-tls",
  "paste",
@@ -1217,6 +1230,7 @@ dependencies = [
  "tokio",
  "url",
  "valkey-module",
+ "valkey-module-macros",
 ]
 
 [[package]]
@@ -1241,6 +1255,19 @@ dependencies = [
  "serde",
  "strum_macros",
  "valkey-module-macros-internals",
+]
+
+[[package]]
+name = "valkey-module-macros"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5017b4ecb384e2937d66f375571c9b8cbbdee1a73a1fcd281e542041d807b76"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.40",
+ "serde",
+ "serde_syn",
+ "syn 1.0.109",
 ]
 
 [[package]]

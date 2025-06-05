@@ -1,11 +1,12 @@
 import time
 from unittest import TestCase
 from threading import Thread
+from urllib.parse import urlparse
 
 from valkey.exceptions import AuthenticationError, ConnectionError
 import valkey
 
-from util import DOCKER_SERVICES, LdapTestCase, valkey_map_to_python_map
+from util import DOCKER_SERVICES, LdapTestCase, parse_valkey_info_section
 
 
 class LdapModuleTest(TestCase):
@@ -145,11 +146,14 @@ class LdapModuleFailoverTest(LdapTestCase):
 
     def _wait_for_ldap_server_status(self, server_name, status_desc):
         while True:
-            result = self.vk.execute_command("LDAP.STATUS")
-            status = valkey_map_to_python_map(result)
+            result = self.vk.execute_command("INFO LDAP")
+            status = parse_valkey_info_section(result.decode("utf-8"))
 
-            if status[server_name]["status"] == status_desc:
-                return
+            for server in status.values():
+                url = urlparse(server["url"])
+                if url.hostname == server_name:
+                    if server["status"] == status_desc:
+                        return
 
             time.sleep(2)
 

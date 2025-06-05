@@ -2,6 +2,7 @@ from unittest import TestCase
 import docker
 import valkey
 
+
 class DockerServices:
 
     def __init__(self):
@@ -9,16 +10,18 @@ class DockerServices:
 
     def assert_all_services_running(self):
         for ct in self.client.containers.list():
-            assert(ct.status == "running")
+            assert ct.status == "running"
 
-    def _find_container(self, name):
+    def _find_container(self, name: str):
         for ct in self.client.containers.list():
             if ct.name == name:
                 return ct
         return None
 
-    def stop_service(self, name):
+    def stop_service(self, name: str):
         ct = self._find_container(name)
+        if ct is None:
+            return None
         ct.kill()
         return ct
 
@@ -57,19 +60,26 @@ class LdapTestCase(TestCase):
         self.vk = vk
 
     def tearDown(self):
+        assert self.vk is not None, "Valkey instance should not be None"
         self.vk.close()
         self.vk = None
 
 
-def valkey_map_to_python_map(valkey_map):
-    def _to_python_value(vk_value):
-        if isinstance(vk_value, list):
-            return valkey_map_to_python_map(vk_value)
+def parse_valkey_info_section(section: str) -> dict:
+    result = {}
+    lines = section.split("\n")
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" not in line:
+            key, value = line.split("=", 1)
+            result[key.strip()] = value.strip()
         else:
-            return vk_value.decode('utf-8')
-
-    python_map = {}
-    for i in range(0, len(valkey_map), 2) :
-        python_map[valkey_map[i].decode('utf-8')] = _to_python_value(valkey_map[i + 1])
-
-    return python_map
+            dict_key, dict_values = line.split(":", 1)
+            nested_dict = {}
+            for key_value_pair in dict_values.split(","):
+                key, value = key_value_pair.strip().split("=", 1)
+                nested_dict[key.strip()] = value.strip()
+            result[dict_key.strip()] = nested_dict
+    return result
