@@ -120,7 +120,7 @@ impl FailureDetector {
         if let Some(handler) = handler_opt {
             match handler.join() {
                 Ok(_) => Ok(()),
-                Err(_) => Err(VkLdapError::FailedToStopFailuredDetectorThread),
+                Err(_) => Err(VkLdapError::FailedToStopFailureDetectorThread),
             }
         } else {
             panic!("failure detector thread should have been initialized");
