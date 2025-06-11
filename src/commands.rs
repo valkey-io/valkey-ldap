@@ -21,7 +21,7 @@ fn add_ldap_status_section(ctx: &InfoContext, _for_crash_report: bool) -> Valkey
     for (idx, server) in servers_health.iter().enumerate() {
         let mut dict = builder
             .add_dictionary(format!("server_{}", idx).as_str())
-            .field("url", server.get_url_ref().as_str())?;
+            .field("host", server.get_host_string())?;
 
         match server.get_status() {
             VkLdapServerStatus::HEALTHY => {
@@ -30,7 +30,7 @@ fn add_ldap_status_section(ctx: &InfoContext, _for_crash_report: bool) -> Valkey
                 match server.get_ping_time() {
                     Some(time) => {
                         dict = dict.field(
-                            "ping_time(ms)",
+                            "ping_time_ms",
                             (time.as_micros() as f64 / 1000.0).to_string(),
                         )?;
                     }
