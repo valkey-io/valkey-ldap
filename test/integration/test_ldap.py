@@ -150,8 +150,7 @@ class LdapModuleFailoverTest(LdapTestCase):
             status = parse_valkey_info_section(result.decode("utf-8"))
 
             for server in status.values():
-                url = urlparse(server["url"])
-                if url.hostname == server_name:
+                if server["host"] == server_name:
                     if server["status"] == status_desc:
                         return
 

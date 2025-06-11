@@ -68,4 +68,11 @@ impl VkLdapServer {
     pub fn get_ping_time(&self) -> Option<Duration> {
         self.ping_time
     }
+
+    pub fn get_host_string(&self) -> String {
+        match self.url.host() {
+            Some(host) => host.to_string(),
+            None => self.url.to_string(),
+        }
+    }
 }
