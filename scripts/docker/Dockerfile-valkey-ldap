@@ -1,8 +1,0 @@
-FROM fedora:41
-
-VOLUME [ "/valkey-ldap" ]
-
-RUN yum -y install valkey openldap
-
-WORKDIR /valkey-ldap
-CMD [ "valkey-server", "./valkey.conf" ]

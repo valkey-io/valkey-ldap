@@ -11,7 +11,8 @@ DOCKER_COMPOSE_RUNNING=`docker compose ls --filter name=valkey-ldap -q && true`
 STOP_SERVERS=
 
 if [ -z $DOCKER_COMPOSE_RUNNING ]; then
-    ./scripts/start_valkey_ldap.sh
+    ./scripts/start_valkey_ldap.sh $*
+    shift
     STOP_SERVERS=true
 fi
 
