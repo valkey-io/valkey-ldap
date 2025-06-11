@@ -36,8 +36,6 @@ class LdapTestCase(TestCase):
     def setUp(self):
         vk = valkey.Valkey(host="localhost", port=6379, db=0)
 
-        vk.execute_command("CONFIG", "SET", "ldap.auth_enabled", "yes")
-
         # LDAP server location
         vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://ldap ldap://ldap-2")
 

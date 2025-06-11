@@ -49,7 +49,6 @@ After creating the above user `bob` in Valkey, it will only be possible to authe
 
 | Config Name | Type | Default | Description |
 | ------------|------|---------|-------------|
-| `ldap.auth_enabled` | boolean | `yes` | Flag to control whether the module should process an authentication request or not. |
 | `ldap.auth_mode` | Enum(`bind`, `search+bind`) | `bind` | The authentication method. Check the [Authentication Modes](#ldap-authentication-modes) section for more information about the differences. |
 | `ldap.servers` | string | `""` | Comma separated list of LDAP URLs of the form `ldap[s]://<domain>:<port>`. |
 

@@ -86,7 +86,6 @@ lazy_static! {
     pub static ref LDAP_TLS_KEY_PATH: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_USE_STARTTLS: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
-    pub static ref LDAP_AUTH_ENABLED: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
     pub static ref LDAP_AUTH_MODE: ValkeyGILGuard<LdapAuthMode> =
         ValkeyGILGuard::new(LdapAuthMode::Bind);
     pub static ref LDAP_SEARCH_BASE: ValkeyGILGuard<ValkeyString> =
@@ -275,8 +274,8 @@ pub fn is_starttls_enabled<T: ValkeyLockIndicator>(ctx: &T) -> bool {
 }
 
 pub fn is_auth_enabled<T: ValkeyLockIndicator>(ctx: &T) -> bool {
-    let auth_enabled = LDAP_AUTH_ENABLED.lock(ctx);
-    *auth_enabled
+    let servers = LDAP_SERVER_LIST.lock(ctx);
+    !servers.is_empty()
 }
 
 pub fn is_bind_mode<T: ValkeyLockIndicator>(ctx: &T) -> bool {
