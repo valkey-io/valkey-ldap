@@ -2,6 +2,7 @@ name: valkey-ldap
 services:
   ldap:
     image: osixia/openldap:1.5.0
+    profiles: ["valkey-7.2", "valkey-8.0", "valkey-8.1"]
     container_name: ldap
     environment:
         - LDAP_ORGANISATION=valkey
@@ -19,6 +20,7 @@ services:
 
   ldap-2:
     image: osixia/openldap:1.5.0
+    profiles: ["valkey-7.2", "valkey-8.0", "valkey-8.1"]
     container_name: ldap-2
     environment:
         - LDAP_ORGANISATION=valkey
@@ -34,15 +36,42 @@ services:
     volumes:
         - ./certs:/container/service/slapd/assets/certs
 
-  valkey:
+  valkey-7.2:
+    hostname: valkey
     build:
-      dockerfile: Dockerfile-valkey-ldap
+      dockerfile: Dockerfile-valkey-ldap-7.2
       context: ./
-    image: valkey-ldap
+    image: valkey-ldap-7.2
+    profiles: ["valkey-7.2"]
     container_name: valkey
     ports:
         - 6379:6379
     volumes:
         - ../../target/debug:/valkey-ldap
 
+  valkey-8.0:
+    hostname: valkey
+    build:
+      dockerfile: Dockerfile-valkey-ldap-8.0
+      context: ./
+    image: valkey-ldap-8.0
+    profiles: ["valkey-8.0"]
+    container_name: valkey
+    ports:
+        - 6379:6379
+    volumes:
+        - ../../target/debug:/valkey-ldap
+
+  valkey-8.1:
+    hostname: valkey
+    build:
+      dockerfile: Dockerfile-valkey-ldap-8.1
+      context: ./
+    image: valkey-ldap-8.1
+    profiles: ["valkey-8.1"]
+    container_name: valkey
+    ports:
+        - 6379:6379
+    volumes:
+        - ../../target/debug:/valkey-ldap
 

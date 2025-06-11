@@ -32,3 +32,4 @@ futures = "0.3.31"
 tokio = {version="1.45.0", features=["rt", "rt-multi-thread", "macros"]}
 valkey-module-macros = "0.1.9"
 linkme = "0.3.33"
+strum_macros = "0.27.1"

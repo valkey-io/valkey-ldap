@@ -1,16 +1,17 @@
 mod auth;
 mod commands;
 mod configs;
+mod logging;
 mod version;
 mod vkldap;
 
 use log::error;
 use valkey_module::{
-    Context, Status, ValkeyGILGuard, ValkeyString, configuration::ConfigurationFlags,
-    logging::standard_log_implementation, valkey_module,
+    Context, Status, ValkeyGILGuard, ValkeyString, configuration::ConfigurationFlags, valkey_module,
 };
 
 use auth::ldap_auth_blocking_callback;
+use logging::standard_log_implementation;
 use version::module_version;
 use vkldap::failure_detector;
 use vkldap::scheduler;
@@ -18,7 +19,7 @@ use vkldap::scheduler;
 fn initializer(ctx: &Context, _args: &[ValkeyString]) -> Status {
     ctx.log_debug("initializing LDAP module");
 
-    let res = standard_log_implementation::setup();
+    let res = standard_log_implementation::setup_for_context(ctx);
     if let Err(err) = res {
         ctx.log_warning(format!("failed to setup log: {err}").as_str());
     }
@@ -54,6 +55,7 @@ fn deinitializer(ctx: &Context) -> Status {
         error!("{err}");
         return Status::Err;
     }
+
     Status::Ok
 }
 
