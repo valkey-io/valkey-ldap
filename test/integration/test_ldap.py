@@ -82,7 +82,7 @@ class LdapModuleBindTest(LdapTestCase):
         self.assertTrue(resp.decode() == "user1")
 
     def test_ldap_disabled(self):
-        self.vk.execute_command("CONFIG", "SET", "ldap.auth_enabled", "no")
+        self.vk.execute_command("CONFIG", "SET", "ldap.servers", "")
         self.vk.execute_command("AUTH", "user1", "pass")
         resp = self.vk.execute_command("ACL", "WHOAMI")
         self.assertTrue(resp.decode() == "user1")

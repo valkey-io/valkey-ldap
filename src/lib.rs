@@ -205,13 +205,6 @@ valkey_module! {
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_connection_setting_change))
             ],
-            [
-                "auth_enabled",
-                &*configs::LDAP_AUTH_ENABLED,
-                true,
-                ConfigurationFlags::DEFAULT,
-                None
-            ],
         ],
         enum: [
             [
