@@ -7,8 +7,8 @@ on:
   pull_request:
     paths:
       - 'src/**'
-      - 'test/unit'
-      - 'test/integration'
+      - 'test/unit/**'
+      - 'test/integration/**'
 
 jobs:
   tests:
