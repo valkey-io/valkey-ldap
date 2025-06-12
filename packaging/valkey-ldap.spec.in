@@ -25,7 +25,7 @@ BuildRequires:  openldap-devel
 BuildRequires:  clang-devel
 BuildRequires:  wget
 
-Requires:       valkey >= 8.0
+Recommends:     valkey >= 7.2
 
 %global _description %{expand:
 An LDAP authentication module for Valkey.}
