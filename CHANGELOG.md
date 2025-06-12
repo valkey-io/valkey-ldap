@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0-rc1] - 2025-06-12
+
 ### Added
 
-- Initial version of an LDAP authentication module for Valkey 8.X or above
+- Initial version of an LDAP authentication module for Valkey 7.2.X or above
+
+
+[unreleased]: https://github.com/valkey-io/valkey-ldap/compare/v1.0.0-rc1...HEAD
+[1.0.0_rc1]: https://github.com/valkey-io/valkey-ldap/releases/tag/v1.0.0-rc1

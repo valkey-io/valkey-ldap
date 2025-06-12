@@ -44,7 +44,7 @@ pub const fn module_version() -> i32 {
             1
         } else if const_str::starts_with!(patch_parts[1], "rc") {
             let rc_num = const_str::unwrap!(const_str::strip_prefix!(patch_parts[1], "rc"));
-            const_str::parse!(rc_num, i32)
+            const_str::parse!(rc_num, i32) + 1
         } else {
             panic!("Malformed version string");
         };
@@ -62,6 +62,6 @@ mod tests {
 
     #[test]
     fn test_version() {
-        assert_eq!(module_version(), 0x01000001);
+        assert_eq!(module_version(), 0x01000002);
     }
 }
