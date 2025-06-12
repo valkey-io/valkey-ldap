@@ -62,6 +62,6 @@ mod tests {
 
     #[test]
     fn test_version() {
-        assert_eq!(module_version(), 0x01000002);
+        assert_eq!(module_version(), 0x01010001);
     }
 }
