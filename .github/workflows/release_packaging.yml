@@ -3,7 +3,7 @@ name: Release Packaging
 on:
   push:
     tags:
-        - 'v*'
+        - '*.*.*'
 
 jobs:
   Create_RPM_Package:
@@ -39,41 +39,8 @@ jobs:
           run: |
             ./packaging/build_srpm.sh
 
-        - name: Trigger Copr Build
+        - name: Trigger and wait for Copr Build
           run : |
             SRPM=`ls valkey-ldap*.rpm`
             copr-cli --config copr.config build valkey-ldap $SRPM
 
-  Create_GitHub_Release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Build
-        run: cargo build --release
-
-      - name: Extract version from tag
-        id: extract_version
-        run: |
-          VERSION="${GITHUB_REF##*/}"
-          VERSION="${VERSION#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Extract changelog for this version
-        id: changelog
-        run: |
-          CHANGELOG=$(./scripts/extract_changelog.sh "${{ steps.extract_version.outputs.VERSION }}")
-          echo "log<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ steps.extract_version.outputs.VERSION }}
-          body: ${{ steps.changelog.outputs.log }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
