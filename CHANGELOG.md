@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Changed
+
+- Fixed module unload that was causing spurious illegal memory accesses
+
 ## [1.0.0-rc1] - 2025-06-12
 
 ### Added

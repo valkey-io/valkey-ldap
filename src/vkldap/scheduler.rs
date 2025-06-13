@@ -13,12 +13,6 @@ use super::{Result, errors::VkLdapError};
 
 lazy_static! {
     static ref SCHEDULER: RwLock<Scheduler> = RwLock::new(Scheduler::new());
-    static ref ASYNC_RUNTIME: Arc<runtime::Runtime> = Arc::new(
-        runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-    );
 }
 
 pub trait TaskTrait<R>: Future<Output = R> + 'static + Send {}
@@ -131,10 +125,14 @@ impl Scheduler {
 
     fn initialize(&mut self) {
         let (job_tx, job_rx): (mpsc::Sender<Job>, mpsc::Receiver<Job>) = mpsc::channel();
+        let async_rt = runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 
         let handler = thread::spawn(move || {
             debug!("job scheduler thread started");
-            ASYNC_RUNTIME.block_on(async move {
+            async_rt.block_on(async move {
                 scheduler_loop(job_rx);
             });
             debug!("job scheduler thread ended");
