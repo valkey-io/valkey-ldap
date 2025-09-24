@@ -98,7 +98,7 @@ lazy_static! {
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_SEARCH_BIND_DN: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
-    pub static ref LDAP_SEARCH_BIND_SHADOW_PASSWD: ValkeyGILGuard<ValkeyString> =
+    pub static ref LDAP_SEARCH_BIND_PASSWD: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_SEARCH_DN_ATTRIBUTE: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
@@ -106,11 +106,6 @@ lazy_static! {
     pub static ref LDAP_FAILURE_DETECTOR_INTERVAL: ValkeyGILGuard<i64> = ValkeyGILGuard::new(1);
     pub static ref LDAP_TIMEOUT_CONNECTION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
     pub static ref LDAP_TIMEOUT_LDAP_OPERATION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
-}
-
-lazy_static! {
-    static ref LDAP_SEARCH_BIND_PASSWD: ValkeyGILGuard<ValkeyString> =
-        ValkeyGILGuard::new(ValkeyString::create(None, ""));
 }
 
 pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
@@ -184,18 +179,6 @@ pub fn process_server_list(server_list: String) -> Result<(), ValkeyError> {
     }
 
     Ok(())
-}
-
-pub fn on_password_config_set<G, T: ConfigurationValue<ValkeyString>>(
-    ctx: &ConfigurationContext,
-    _name: &str,
-    val: &'static T,
-) -> Result<(), ValkeyError> {
-    LDAP_SEARCH_BIND_PASSWD.set(ctx, val.get(ctx))?;
-
-    refresh_ldap_settings_cache(ctx);
-
-    val.set(ctx, ValkeyString::create(None, "*********"))
 }
 
 pub fn on_ldap_setting_change<G, T: ConfigurationValue<G>>(
