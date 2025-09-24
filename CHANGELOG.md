@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Fixed bug in CONFIG REWRITE that would always re-write the `ldap.search_bind_passwd`
+  config with an obfuscated value
+
 ## [1.0.0] - 2025-06-13
 
 ### Changed

@@ -124,7 +124,11 @@ class LdapModuleBindAndSearchTest(LdapTestCase):
 
     def test_ldap_bind_password_hidden(self):
         res = self.vk.execute_command("CONFIG", "GET", "ldap.search_bind_passwd")
-        self.assertEqual(res[1].decode("utf-8"), "*********")
+        self.assertEqual(res[1].decode("utf-8"), "admin123!")
+
+        res = self.vk.execute_command("CONFIG", "GET", "ldap.*")
+        for i in range(0, len(res), 2):
+            self.assertNotEqual(res[i].decode("utf-8"), "ldap.search_bind_passwd")
 
 
 class LdapModuleFailoverTest(LdapTestCase):
