@@ -38,6 +38,9 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      - name: Change rust toolchain to 1.87.0
+        run: rustup override set 1.87.0
+
       - name: Check if only the relevant files for testing the module are changed
         id: filter
         run: |

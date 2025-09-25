@@ -43,7 +43,7 @@ An LDAP authentication module for Valkey.}
 # Install rust compiler
 wget https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init
 chmod +x rustup-init
-./rustup-init -y
+./rustup-init --default-toolchain 1.87.0 -y
 
 
 set -euo pipefail
