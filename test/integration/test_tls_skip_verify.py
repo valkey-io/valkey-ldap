@@ -1,7 +1,3 @@
-import time
-from unittest import TestCase
-
-from valkey.exceptions import AuthenticationError, ConnectionError, ResponseError
 import valkey
 
 from util import LdapTestCase
