@@ -101,6 +101,7 @@ pub struct VkConnectionSettings {
     pub ca_cert_path: Option<String>,
     pub client_cert_path: Option<String>,
     pub client_key_path: Option<String>,
+    pub tls_skip_verify: bool,
     pub connection_pool_size: usize,
     pub timeout_connection: Duration,
 }
@@ -111,6 +112,7 @@ impl VkConnectionSettings {
         ca_cert_path: Option<String>,
         client_cert_path: Option<String>,
         client_key_path: Option<String>,
+        tls_skip_verify: bool,
         connection_pool_size: usize,
         timeout_connection: Duration,
     ) -> Self {
@@ -119,6 +121,7 @@ impl VkConnectionSettings {
             ca_cert_path,
             client_cert_path,
             client_key_path,
+            tls_skip_verify,
             connection_pool_size,
             timeout_connection,
         }
@@ -132,6 +135,7 @@ impl Default for VkConnectionSettings {
             ca_cert_path: Default::default(),
             client_cert_path: Default::default(),
             client_key_path: Default::default(),
+            tls_skip_verify: Default::default(),
             connection_pool_size: 0,
             timeout_connection: Default::default(),
         }

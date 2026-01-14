@@ -294,6 +294,13 @@ valkey_module! {
                 Some(Box::new(configs::on_connection_setting_change))
             ],
             [
+                "tls_skip_verify",
+                &*configs::LDAP_TLS_SKIP_VERIFY,
+                false,
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_connection_setting_change))
+            ],
+            [
                 "acl_fallback_enabled",
                 &*configs::LDAP_ACL_FALLBACK_ENABLED,
                 false,

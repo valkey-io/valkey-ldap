@@ -256,6 +256,7 @@ AUTH bob ldap-password
 | `ldap.tls_ca_cert_path` | string | `""` | The filesystem path of the CA certificate for validating the server certificate in a TLS connection. |
 | `ldap.tls_cert_path` | string | `""` | The filesystem path of the client certificate to be used in a TLS connection to the LDAP server. |
 | `ldap.tls_key_path` | string | `""` | The filesystem path of the client certificate key to be used in a TLS connection to the LDAP server. |
+| `ldap.tls_skip_verify` | boolean | `no` | **⚠️ INSECURE**: Skip TLS certificate verification. When enabled, accepts any certificate presented by the LDAP server, including self-signed and expired certificates. This disables protection against man-in-the-middle attacks and should **only be used in development/testing environments**. Never use in production. |
 
 ### Bind Mode Options
 
