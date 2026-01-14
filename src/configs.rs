@@ -88,6 +88,7 @@ lazy_static! {
     pub static ref LDAP_TLS_KEY_PATH: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_USE_STARTTLS: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
+    pub static ref LDAP_TLS_SKIP_VERIFY: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
     pub static ref LDAP_AUTH_MODE: ValkeyGILGuard<LdapAuthMode> =
         ValkeyGILGuard::new(LdapAuthMode::Bind);
     pub static ref LDAP_SEARCH_BASE: ValkeyGILGuard<ValkeyString> =
@@ -183,6 +184,7 @@ pub fn refresh_connection_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
         get_tls_ca_cert_path(ctx),
         get_tls_cert_path(ctx),
         get_tls_key_path(ctx),
+        is_tls_skip_verify(ctx),
         get_connection_pool_size(ctx),
         get_timeout_connection(ctx),
     );
@@ -195,6 +197,7 @@ pub fn refresh_connection_settings_cache_blocking<T: ValkeyLockIndicator>(ctx: &
         get_tls_ca_cert_path(ctx),
         get_tls_cert_path(ctx),
         get_tls_key_path(ctx),
+        is_tls_skip_verify(ctx),
         get_connection_pool_size(ctx),
         get_timeout_connection(ctx),
     );
@@ -319,6 +322,11 @@ pub fn get_tls_key_path<T: ValkeyLockIndicator>(ctx: &T) -> Option<String> {
 pub fn is_starttls_enabled<T: ValkeyLockIndicator>(ctx: &T) -> bool {
     let use_starttls = LDAP_USE_STARTTLS.lock(ctx);
     *use_starttls
+}
+
+pub fn is_tls_skip_verify<T: ValkeyLockIndicator>(ctx: &T) -> bool {
+    let skip_verify = LDAP_TLS_SKIP_VERIFY.lock(ctx);
+    *skip_verify
 }
 
 pub fn is_auth_enabled<T: ValkeyLockIndicator>(ctx: &T) -> bool {

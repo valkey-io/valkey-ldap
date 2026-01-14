@@ -209,6 +209,10 @@ impl VkLdapConnection {
         if requires_tls {
             let mut tls_builder = &mut TlsConnector::builder();
 
+            if settings.tls_skip_verify {
+                tls_builder = tls_builder.danger_accept_invalid_certs(true);
+            }
+
             if let Some(path) = &settings.ca_cert_path {
                 let ca_cert_bytes =
                     handle_io_error!(fs::read(path), "failed to read CA cert file".to_string());
