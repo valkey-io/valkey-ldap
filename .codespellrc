@@ -1,0 +1,19 @@
+[codespell]
+# Keep this fast and focused; CI excludes generated/build artifacts.
+skip =
+  ./.git,
+  ./target,
+  ./.venv,
+  ./.pytest_cache,
+  ./test/**/__pycache__,
+  ./docker/**/certs,
+  ./Cargo.lock
+
+# Project-specific allowed words (add as needed)
+ignore-words-list =
+  valkey,
+  redismodule
+
+# Don't warn on URLs
+ignore-regex =
+  https?://\\S+

@@ -1,0 +1,37 @@
+name: Coverage
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "1.0"
+  pull_request:
+
+jobs:
+  rust-coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set Rust toolchain (1.87.0)
+        uses: dtolnay/rust-toolchain@1.87.0
+        with:
+          components: llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Generate lcov
+        run: cargo llvm-cov --features enable-system-alloc --lcov --output-path lcov.info
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
