@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.sha.outputs.value }}
+      version: ${{ steps.version.outputs.value }}
     steps:
       - name: Checkout code
         uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
@@ -20,12 +21,22 @@ jobs:
         run: |
           echo "value=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+      - name: Get version for container packages
+        id: version
+        run: |
+          VERSION=$(grep '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+          GIT_SHA=$(git rev-parse --short HEAD)
+          if [[ "$VERSION" = *-dev ]]; then
+            VERSION="${VERSION}+${GIT_SHA}"
+          fi
+          echo "value=${VERSION}" >> $GITHUB_OUTPUT
+
   Create_RPM_Package:
-    name: Create RPM
+    name: Create RPM (Copr)
     needs: Get_GIT_SHA
     runs-on: ubuntu-latest
     container:
-      image: fedora:41
+      image: fedora:44
     steps:
         - name: Checkout code
           uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
@@ -76,3 +87,10 @@ jobs:
           run : |
             SRPM=`ls valkey-ldap*.rpm`
             copr-cli --config copr.config build valkey-ldap $SRPM
+
+  Container_Packages:
+    name: Container-based packages
+    needs: Get_GIT_SHA
+    uses: ./.github/workflows/packages.yml
+    with:
+      version: ${{ needs.Get_GIT_SHA.outputs.version }}

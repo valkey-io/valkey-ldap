@@ -3,27 +3,50 @@
 %global valkey_modules_dir %{_libdir}/valkey/modules
 %global debug_package %{nil}
 
+# Detect SUSE
+%if 0%{?suse_version}
+%global is_suse 1
+%endif
+
+# Detect architecture for rustup
+%ifarch aarch64
+%global rustup_arch aarch64-unknown-linux-gnu
+%endif
+%ifarch x86_64
+%global rustup_arch x86_64-unknown-linux-gnu
+%endif
+
 Name:           #[PKG_NAME]
 Version:        #[RPM_VERSION]
 Release:        1%{dist}
 Summary:        LDAP authentication module for Valkey
 
-%if 0%{?fedora}
-SourceLicense:  BSD-3-Clause
-%endif
 License:        BSD-3-Clause
 
 URL:            https://github.com/valkey-io/valkey-ldap
 Source:         valkey-ldap-%{upstream_version}.tar.gz
 
-%if 0%{?fedora}
+%if 0%{?fedora} && !0%{?amzn}
 BuildRequires:  cargo-rpm-macros >= 26
 %endif
 
+# SUSE uses different package names
+%if 0%{?is_suse}
+BuildRequires:  libopenssl-devel
+BuildRequires:  openldap2-devel
+BuildRequires:  clang-devel
+%else
 BuildRequires:  openssl-devel
 BuildRequires:  openldap-devel
 BuildRequires:  clang-devel
-BuildRequires:  wget
+%endif
+
+BuildRequires:  gcc
+BuildRequires:  make
+BuildRequires:  pkg-config
+# curl or curl-minimal is needed for rustup download on non-Fedora;
+# not listed as BuildRequires to avoid curl-minimal conflicts on EL9+.
+# The container build script installs it before rpmbuild runs.
 
 Recommends:     valkey >= 7.2
 
@@ -35,15 +58,15 @@ An LDAP authentication module for Valkey.}
 %prep
 %autosetup -n valkey-ldap-%{upstream_version} -p1
 
-%if 0%{?fedora}
+%if 0%{?fedora} && !0%{?amzn}
 %cargo_prep -v vendor
 
 %else
 
-# Install rust compiler
-wget https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init
+# Install rust compiler using correct arch
+curl -sSf -o rustup-init https://static.rust-lang.org/rustup/dist/%{rustup_arch}/rustup-init
 chmod +x rustup-init
-./rustup-init --default-toolchain 1.87.0 -y
+./rustup-init --default-toolchain 1.87.0 --no-modify-path --profile minimal -y
 
 
 set -euo pipefail
@@ -92,14 +115,25 @@ EOF
 
 %build
 
-%if 0%{?fedora}
+%if 0%{?fedora} && !0%{?amzn}
 
 %cargo_build
 %{cargo_license} > LICENSE.dependencies
 
 %else
 
-. /builddir/.cargo/env
+# Source cargo env — try multiple known locations
+if [ -f "$HOME/.cargo/env" ]; then
+    . "$HOME/.cargo/env"
+elif [ -f /root/.cargo/env ]; then
+    . /root/.cargo/env
+elif [ -f /builddir/.cargo/env ]; then
+    . /builddir/.cargo/env
+elif [ -f /usr/local/cargo/env ]; then
+    . /usr/local/cargo/env
+else
+    echo "WARNING: No cargo env file found, assuming cargo is in PATH" >&2
+fi
 
 cargo build %{?_smp_mflags} --profile rpm
 
