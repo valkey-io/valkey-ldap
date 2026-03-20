@@ -4,13 +4,27 @@ on:
   push:
     tags:
         - '*.*.*'
+        - '*.*.*-rc*'
 
 jobs:
+  Get_Version:
+    name: Extract version from tag
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "value=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Release version: ${TAG}"
+
   Create_RPM_Package:
-    name: Create RPM
+    name: Create RPM (Copr)
     runs-on: ubuntu-latest
     container:
-      image: fedora:41
+      image: fedora:44
     steps:
         - name: Checkout code
           uses: actions/checkout@v4
@@ -44,3 +58,9 @@ jobs:
             SRPM=`ls valkey-ldap*.rpm`
             copr-cli --config copr.config build valkey-ldap $SRPM
 
+  Container_Packages:
+    name: Container-based packages
+    needs: Get_Version
+    uses: ./.github/workflows/packages.yml
+    with:
+      version: ${{ needs.Get_Version.outputs.version }}
