@@ -1,0 +1,114 @@
+{
+  "rpm": [
+    {
+      "platform_id": "fedora-41",
+      "family": "fedora",
+      "image": "fedora:41",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "fedora-42",
+      "family": "fedora",
+      "image": "fedora:42",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "fedora-43",
+      "family": "fedora",
+      "image": "fedora:43",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "fedora-44",
+      "family": "fedora",
+      "image": "fedora:44",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "oraclelinux-8",
+      "family": "rhel",
+      "image": "oraclelinux:8",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "oraclelinux-9",
+      "family": "rhel",
+      "image": "oraclelinux:9",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "oraclelinux-10",
+      "family": "rhel",
+      "image": "oraclelinux:10",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "rockylinux-8",
+      "family": "rhel",
+      "image": "rockylinux:8",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "rockylinux-9",
+      "family": "rhel",
+      "image": "rockylinux:9",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "almalinux-8",
+      "family": "rhel",
+      "image": "almalinux:8",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "almalinux-9",
+      "family": "rhel",
+      "image": "almalinux:9",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "almalinux-10",
+      "family": "rhel",
+      "image": "almalinux:10",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
+      "platform_id": "amazonlinux-2023",
+      "family": "rhel",
+      "image": "amazonlinux:2023",
+      "arch": ["x86_64", "aarch64"]
+    }
+  ],
+  "deb": [
+    {
+      "platform_id": "debian-11",
+      "codename": "bullseye",
+      "image": "debian:11",
+      "arch": ["amd64", "arm64"]
+    },
+    {
+      "platform_id": "debian-12",
+      "codename": "bookworm",
+      "image": "debian:12",
+      "arch": ["amd64", "arm64"]
+    },
+    {
+      "platform_id": "debian-13",
+      "codename": "trixie",
+      "image": "debian:13",
+      "arch": ["amd64", "arm64"]
+    },
+    {
+      "platform_id": "ubuntu-22.04",
+      "codename": "jammy",
+      "image": "ubuntu:22.04",
+      "arch": ["amd64", "arm64"]
+    },
+    {
+      "platform_id": "ubuntu-24.04",
+      "codename": "noble",
+      "image": "ubuntu:24.04",
+      "arch": ["amd64", "arm64"]
+    }
+  ]
+}

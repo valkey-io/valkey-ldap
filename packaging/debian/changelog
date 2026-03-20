@@ -1,0 +1,5 @@
+valkey-ldap (1.1.0~dev-1) unstable; urgency=medium
+
+  * Initial packaging — version placeholder overridden at build time.
+
+ -- Valkey Contributors <valkey@lists.valkey.io>  Thu, 01 Jan 2025 00:00:00 +0000

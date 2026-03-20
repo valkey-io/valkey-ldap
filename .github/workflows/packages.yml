@@ -1,0 +1,300 @@
+name: Build Packages
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Module version to build'
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Module version (leave empty to use Cargo.toml)'
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'scripts/build-container-*.sh'
+      - 'scripts/install-rust-toolchain.sh'
+      - 'scripts/test-module-package.sh'
+      - '.github/workflows/packages.yml'
+      - '.github/package-platforms.json'
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Job 1: Derive version and load platform matrix ──
+  process-inputs:
+    name: Process inputs
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      pkg_name: ${{ steps.version.outputs.pkg_name }}
+      rpm-matrix: ${{ steps.matrix.outputs.rpm }}
+      deb-matrix: ${{ steps.matrix.outputs.deb }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=$(grep '^version = ' Cargo.toml | sed 's/.*"\(.*\)"/\1/')
+            if [[ "$VERSION" = *-dev ]]; then
+              GIT_SHA=$(git rev-parse --short HEAD)
+              VERSION="${VERSION}+${GIT_SHA}"
+            fi
+          fi
+          echo "value=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$VERSION" = *-dev* ]]; then
+            echo "pkg_name=valkey-ldap-nightly" >> "$GITHUB_OUTPUT"
+          else
+            echo "pkg_name=valkey-ldap" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Version: ${VERSION}"
+
+      - name: Build platform matrices
+        id: matrix
+        run: |
+          # Expand arch arrays into individual matrix entries
+          RPM_MATRIX=$(jq -c '[.rpm[] | . as $p | .arch[] | {platform_id: $p.platform_id, family: $p.family, image: $p.image, arch: .}]' .github/package-platforms.json)
+          DEB_MATRIX=$(jq -c '[.deb[] | . as $p | .arch[] | {platform_id: $p.platform_id, codename: $p.codename, image: $p.image, arch: .}]' .github/package-platforms.json)
+
+          echo "rpm=${RPM_MATRIX}" >> "$GITHUB_OUTPUT"
+          echo "deb=${DEB_MATRIX}" >> "$GITHUB_OUTPUT"
+
+  # ── Job 2: Vendor deps and create source tarball ──
+  prepare-source:
+    name: Prepare source tarball
+    needs: process-inputs
+    runs-on: ubuntu-latest
+    env:
+      MODULE_VERSION: ${{ needs.process-inputs.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.87.0
+
+      - name: Vendor dependencies
+        run: cargo vendor
+
+      - name: Create source tarball
+        run: |
+          SRCDIR="valkey-ldap-${MODULE_VERSION}"
+          mkdir -p "/tmp/${SRCDIR}"
+          cp -r src vendor Cargo.toml Cargo.lock README.md LICENSE build.rs "/tmp/${SRCDIR}/"
+          cd /tmp
+          tar czf "${SRCDIR}.tar.gz" "${SRCDIR}"
+
+      - name: Upload source tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-tarball
+          path: /tmp/valkey-ldap-${{ env.MODULE_VERSION }}.tar.gz
+          retention-days: 3
+
+  # ── Job 3: Build RPM packages ──
+  build-rpm:
+    name: 'RPM ${{ matrix.platform_id }} (${{ matrix.arch }})'
+    needs: [process-inputs, prepare-source]
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.process-inputs.outputs.rpm-matrix) }}
+    env:
+      MODULE_VERSION: ${{ needs.process-inputs.outputs.version }}
+      PKG_NAME: ${{ needs.process-inputs.outputs.pkg_name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download source tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: source-tarball
+          path: ./source
+
+      - name: Create output directory
+        run: mkdir -p ./output
+
+      - name: Build RPM in container
+        run: |
+          docker run --rm \
+            -e PLATFORM_FAMILY="${{ matrix.family }}" \
+            -e PLATFORM_ID="${{ matrix.platform_id }}" \
+            -e EXPECTED_ARCH="${{ matrix.arch }}" \
+            -e MODULE_VERSION="${MODULE_VERSION}" \
+            -e PKG_NAME="${PKG_NAME}" \
+            -v "$(pwd)/source:/source:ro" \
+            -v "$(pwd)/packaging:/packaging:ro" \
+            -v "$(pwd)/scripts:/scripts:ro" \
+            -v "$(pwd)/output:/output" \
+            "${{ matrix.image }}" \
+            bash /scripts/build-container-rpm.sh
+
+      - name: Upload RPM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ matrix.platform_id }}-${{ matrix.arch }}
+          path: ./output/*.rpm
+          retention-days: 7
+
+  # ── Job 4: Build DEB packages ──
+  build-deb:
+    name: 'DEB ${{ matrix.platform_id }} (${{ matrix.arch }})'
+    needs: [process-inputs, prepare-source]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.process-inputs.outputs.deb-matrix) }}
+    env:
+      MODULE_VERSION: ${{ needs.process-inputs.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download source tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: source-tarball
+          path: ./source
+
+      - name: Create output directory
+        run: mkdir -p ./output
+
+      - name: Build DEB in container
+        run: |
+          docker run --rm \
+            -e PLATFORM_ID="${{ matrix.platform_id }}" \
+            -e PLATFORM_CODENAME="${{ matrix.codename }}" \
+            -e EXPECTED_ARCH="${{ matrix.arch }}" \
+            -e MODULE_VERSION="${MODULE_VERSION}" \
+            -v "$(pwd)/source:/source:ro" \
+            -v "$(pwd)/packaging:/packaging:ro" \
+            -v "$(pwd)/scripts:/scripts:ro" \
+            -v "$(pwd)/output:/output" \
+            "${{ matrix.image }}" \
+            bash /scripts/build-container-deb.sh
+
+      - name: Upload DEB artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.platform_id }}-${{ matrix.arch }}
+          path: ./output/valkey-ldap_*
+          retention-days: 7
+
+  # ── Job 5: Test RPM packages ──
+  test-rpm:
+    name: 'Test RPM ${{ matrix.platform_id }} (${{ matrix.arch }})'
+    needs: [process-inputs, build-rpm]
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.process-inputs.outputs.rpm-matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download RPM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: rpm-${{ matrix.platform_id }}-${{ matrix.arch }}
+          path: ./packages
+
+      - name: Find RPM filename
+        id: find-rpm
+        run: |
+          RPM_FILE=$(ls packages/*.rpm | grep -v '\.src\.rpm$' | head -1 | xargs basename)
+          echo "file=${RPM_FILE}" >> "$GITHUB_OUTPUT"
+
+      - name: Test RPM in container
+        run: |
+          docker run --rm \
+            -e PACKAGE_FILE="${{ steps.find-rpm.outputs.file }}" \
+            -e EXPECTED_ARCH="${{ matrix.arch }}" \
+            -v "$(pwd)/packages:/packages:ro" \
+            -v "$(pwd)/scripts:/scripts:ro" \
+            "${{ matrix.image }}" \
+            bash /scripts/test-module-package.sh
+
+  # ── Job 6: Test DEB packages ──
+  test-deb:
+    name: 'Test DEB ${{ matrix.platform_id }} (${{ matrix.arch }})'
+    needs: [process-inputs, build-deb]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.process-inputs.outputs.deb-matrix) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download DEB artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: deb-${{ matrix.platform_id }}-${{ matrix.arch }}
+          path: ./packages
+
+      - name: Find DEB filename
+        id: find-deb
+        run: |
+          DEB_FILE=$(ls packages/*.deb | head -1 | xargs basename)
+          echo "file=${DEB_FILE}" >> "$GITHUB_OUTPUT"
+
+      - name: Test DEB in container
+        run: |
+          docker run --rm \
+            -e PACKAGE_FILE="${{ steps.find-deb.outputs.file }}" \
+            -e EXPECTED_ARCH="${{ matrix.arch }}" \
+            -v "$(pwd)/packages:/packages:ro" \
+            -v "$(pwd)/scripts:/scripts:ro" \
+            "${{ matrix.image }}" \
+            bash /scripts/test-module-package.sh
+
+  # ── Job 7: Build summary ──
+  build-summary:
+    name: Build Summary
+    if: always()
+    needs: [process-inputs, prepare-source, build-rpm, build-deb, test-rpm, test-deb]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          echo "## Package Build Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Version:** ${{ needs.process-inputs.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Package name:** ${{ needs.process-inputs.outputs.pkg_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Stage | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Source tarball | ${{ needs.prepare-source.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| RPM builds | ${{ needs.build-rpm.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| DEB builds | ${{ needs.build-deb.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| RPM tests | ${{ needs.test-rpm.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| DEB tests | ${{ needs.test-deb.result }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check for failures
+        if: >-
+          needs.prepare-source.result == 'failure' ||
+          needs.build-rpm.result == 'failure' ||
+          needs.build-deb.result == 'failure' ||
+          needs.test-rpm.result == 'failure' ||
+          needs.test-deb.result == 'failure'
+        run: |
+          echo "One or more stages failed!"
+          exit 1
