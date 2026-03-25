@@ -63,12 +63,22 @@ echo "    Expected arch: ${EXPECTED_ARCH}"
 echo ""
 
 # ── Install test utilities (file, binutils) ──
+echo "==> Installing test utilities..."
 if [ "$PKG_TYPE" = "rpm" ]; then
-    yum install -y file binutils &>/dev/null || dnf install -y file binutils &>/dev/null || true
+    if command -v dnf &>/dev/null; then
+        dnf install -y file binutils
+    else
+        yum install -y file binutils
+    fi
 else
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq &>/dev/null
-    apt-get install -y --no-install-recommends file binutils &>/dev/null
+    apt-get update -qq
+    apt-get install -y --no-install-recommends file binutils
+fi
+
+if ! command -v file &>/dev/null || ! command -v nm &>/dev/null; then
+    echo "ERROR: Failed to install test utilities (file, binutils)" >&2
+    exit 1
 fi
 
 # ── Test 1: Package installs cleanly ──
@@ -77,8 +87,17 @@ install_deb() {
     # Verify it's actually installed
     dpkg -s valkey-ldap &>/dev/null
 }
+install_rpm() {
+    if command -v dnf &>/dev/null; then
+        dnf install -y "$PKG_PATH"
+    elif command -v yum &>/dev/null; then
+        yum install -y "$PKG_PATH"
+    else
+        rpm -ivh "$PKG_PATH"
+    fi
+}
 if [ "$PKG_TYPE" = "rpm" ]; then
-    check "Package installs cleanly" rpm -ivh --nodeps "$PKG_PATH"
+    check "Package installs cleanly" install_rpm
 else
     check "Package installs cleanly" install_deb
 fi
