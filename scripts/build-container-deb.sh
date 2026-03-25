@@ -22,16 +22,17 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
     build-essential \
-    debhelper \
+    debhelper-compat \
     devscripts \
     libssl-dev \
-    libldap-dev || apt-get install -y --no-install-recommends libldap2-dev
-apt-get install -y --no-install-recommends \
     libclang-dev \
     curl \
     ca-certificates \
     pkg-config \
     fakeroot
+# libldap-dev was renamed to libldap2-dev on older Debian/Ubuntu
+apt-get install -y --no-install-recommends libldap-dev ||
+    apt-get install -y --no-install-recommends libldap2-dev
 
 # ── Step 2: Install Rust toolchain ──
 bash /scripts/install-rust-toolchain.sh

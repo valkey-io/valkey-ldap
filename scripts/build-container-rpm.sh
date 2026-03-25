@@ -2,7 +2,7 @@
 # build-container-rpm.sh — Build RPM packages inside a container
 #
 # Expected env vars:
-#   PLATFORM_FAMILY  — "rhel" or "suse"
+#   PLATFORM_FAMILY  — "fedora", "rhel", or "suse"
 #   PLATFORM_ID      — e.g. "rockylinux-9", "opensuse-leap-15.6"
 #   EXPECTED_ARCH    — "x86_64" or "aarch64"
 #   MODULE_VERSION   — e.g. "1.1.0" or "1.1.0-dev+abc1234"
