@@ -107,7 +107,7 @@ macro_rules! notify_wait {
 
         fut.await;
 
-        // Re-acaquire the lock
+        // Re-acquire the lock
         lock.lock().await
     }};
 }
