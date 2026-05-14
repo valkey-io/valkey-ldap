@@ -186,6 +186,34 @@ class LdapModuleFailoverTest(LdapTestCase):
         DOCKER_SERVICES.restart_service(service2)
         self._wait_for_ldap_server_status("ldap-2", "healthy")
 
+    def test_unhealthy_error_includes_server_details(self):
+        service = DOCKER_SERVICES.stop_service("ldap")
+        service2 = DOCKER_SERVICES.stop_service("ldap-2")
+        self._wait_for_ldap_server_status("ldap", "unhealthy")
+        self._wait_for_ldap_server_status("ldap-2", "unhealthy")
+
+        with self.assertRaises(AuthenticationError):
+            self.vk.execute_command("AUTH", "user1", "user1@123")
+
+        # Valkey always returns a generic auth error to the client. The per-server
+        # error detail is exposed via INFO LDAP so operators can diagnose without
+        # digging through server logs.
+        info = parse_valkey_info_section(
+            self.vk.execute_command("INFO LDAP").decode("utf-8")
+        )
+        for server in info.values():
+            if server.get("host") in ("ldap", "ldap-2"):
+                self.assertEqual(server.get("status"), "unhealthy")
+                self.assertTrue(
+                    server.get("error", ""),
+                    f"server {server['host']} should expose a non-empty error reason",
+                )
+
+        DOCKER_SERVICES.restart_service(service)
+        DOCKER_SERVICES.restart_service(service2)
+        self._wait_for_ldap_server_status("ldap", "healthy")
+        self._wait_for_ldap_server_status("ldap-2", "healthy")
+
     def test_multi_auth_with_failover(self):
         stop_worker = False
         worker_result = {"success": True, "error": None}
