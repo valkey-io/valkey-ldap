@@ -88,11 +88,13 @@ impl VkLdapContext {
             return ();
         }
 
-        let server = &mut self.servers[server.get_id()];
-        if server.get_url_ref() != server.get_url_ref() {
+        // Guard: the slot may have been replaced by a different server since
+        // the caller took a snapshot (e.g. after ldap.servers was reconfigured).
+        if self.servers[server.get_id()].get_url_ref() != server.get_url_ref() {
             return ();
         }
 
+        let server = &mut self.servers[server.get_id()];
         if server.get_status() != status {
             let pre_status = server.get_status();
             let url = server.get_url_ref();
