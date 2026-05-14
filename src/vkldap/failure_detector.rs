@@ -6,7 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use futures::future;
-use log::{debug, error};
+use log::{debug, error, warn};
 
 use super::context;
 use super::errors::VkLdapError;
@@ -21,16 +21,18 @@ async fn check_server_health(server: VkLdapServer) {
         let res = pool_conn.conn.ping().await;
         let ping_time = now.elapsed();
 
-        context::return_pool_connection(pool_conn).await;
-
         if let Err(err) = res {
+            // Mark unhealthy before returning the connection so that no request
+            // can dequeue the dead connection between the two operations.
             context::update_server_status(
                 &server,
                 VkLdapServerStatus::UNHEALTHY(err.to_string()),
                 None,
             )
             .await;
+            context::return_pool_connection(pool_conn).await;
         } else {
+            context::return_pool_connection(pool_conn).await;
             context::update_server_status(
                 &server,
                 super::server::VkLdapServerStatus::HEALTHY,
@@ -44,8 +46,9 @@ async fn check_server_health(server: VkLdapServer) {
         match conn_res {
             Ok(mut conn) => {
                 let res = conn.ping().await;
-                if let Ok(_) = res {
-                    context::refresh_pool_connections(&server).await;
+                match res {
+                    Ok(_) => context::refresh_pool_connections(&server).await,
+                    Err(err) => warn!("recovery ping failed for {}: {err}", server.get_url_ref()),
                 }
             }
             Err(err) => {

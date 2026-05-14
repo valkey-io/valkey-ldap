@@ -1,3 +1,4 @@
+import time
 from unittest import TestCase
 import docker
 import valkey
@@ -27,6 +28,20 @@ class DockerServices:
 
     def restart_service(self, serv):
         serv.restart()
+
+    def exec_in(self, name: str, cmd: str):
+        ct = self._find_container(name)
+        if ct is None:
+            raise RuntimeError(f"Container '{name}' not found")
+        result = ct.exec_run(["bash", "-c", cmd], user="root")
+        return result.exit_code, result.output
+
+    def wait_for_port(self, name: str, port: int):
+        while True:
+            code, _ = self.exec_in(name, f"bash -c 'echo > /dev/tcp/localhost/{port}' 2>/dev/null")
+            if code == 0:
+                return
+            time.sleep(0.5)
 
 
 DOCKER_SERVICES = DockerServices()
