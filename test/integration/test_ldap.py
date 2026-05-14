@@ -203,15 +203,168 @@ class LdapModuleFailoverTest(LdapTestCase):
         time.sleep(1)
 
         service = DOCKER_SERVICES.stop_service("ldap")
+        try:
+            self._wait_for_ldap_server_status("ldap", "unhealthy")
+            time.sleep(1)
+
+            stop_worker = True
+            worker_thread.join()
+            self.assertIsNone(worker_result["error"])
+        finally:
+            if service is not None:
+                DOCKER_SERVICES.restart_service(service)
+                self._wait_for_ldap_server_status("ldap", "healthy")
+
+        self.test_ldap_auth()
+
+    def test_hard_drop_no_recovery(self):
+        self.vk.execute_command("CONFIG", "SET", "ldap.connection_pool_size", "5")
+        # Kill both servers hard
+        service = DOCKER_SERVICES.stop_service("ldap")
+        service2 = DOCKER_SERVICES.stop_service("ldap-2")
         self._wait_for_ldap_server_status("ldap", "unhealthy")
-        time.sleep(1)
+        # Restart immediately - server comes up slowly
         DOCKER_SERVICES.restart_service(service)
+        # Don't wait for healthy - fire auth attempts right away to stress pool reconstruction
+        time.sleep(1)
+        self._wait_for_ldap_server_status("ldap", "healthy")  # assert this eventually passes
+        self.test_ldap_auth()
+        DOCKER_SERVICES.restart_service(service2)
+        self._wait_for_ldap_server_status("ldap-2", "healthy")
+
+
+class LdapPoolReconstructionTest(LdapTestCase):
+    """
+    Reproduces the all-or-nothing reset_connections bug:
+    when the LDAP server is degraded enough to accept the FD probe connection
+    but rejects subsequent pool connections, the pool is left empty and the
+    server never transitions back to HEALTHY.
+
+    Uses iptables inside the ldap container (requires NET_ADMIN cap) to
+    rate-limit new TCP SYN packets (--syn) on port 389. The FD probe's SYN
+    consumes one burst slot; pool construction SYNs consume the rest or are
+    rejected. Established connections are unaffected so the LDAP protocol
+    can complete normally on allowed connections.
+    """
+
+    _IPTABLES_DROP_RULE = "iptables -I INPUT -p tcp --syn --dport 389 -j REJECT"
+
+    def setUp(self):
+        super().setUp()
+        DOCKER_SERVICES.assert_all_services_running()
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "bind")
+        self.vk.execute_command(
+            "CONFIG", "SET", "ldap.bind_dn_suffix", ",OU=devops,DC=valkey,DC=io"
+        )
+        self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://ldap")
+        self.vk.execute_command("CONFIG", "SET", "ldap.connection_pool_size", "5")
+        self._iptables_active = False
+        self._iptables_burst = 1
+
+    def tearDown(self):
+        if self._iptables_active:
+            self._remove_connection_limit()
+        self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://ldap ldap://ldap-2")
+        super().tearDown()
+
+    def _wait_for_ldap_server_status(self, server_name, status_desc):
+        while True:
+            result = self.vk.execute_command("INFO LDAP")
+            status = parse_valkey_info_section(result.decode("utf-8"))
+            for server in status.values():
+                if server["host"] == server_name:
+                    if server["status"] == status_desc:
+                        return
+            time.sleep(2)
+
+    def _rate_rule(self, burst):
+        return (
+            f"iptables -I INPUT -p tcp --syn --dport 389 "
+            f"-m limit --limit 1/sec --limit-burst {burst} -j ACCEPT"
+        )
+
+    def _apply_connection_limit(self, burst=1):
+        self._iptables_burst = burst
+        # Insert REJECT first so it lands at position 1, then insert ACCEPT
+        # which pushes REJECT to position 2. Final chain: [ACCEPT(rate), REJECT].
+        DOCKER_SERVICES.exec_in("ldap", self._IPTABLES_DROP_RULE)
+        DOCKER_SERVICES.exec_in("ldap", self._rate_rule(burst))
+        self._iptables_active = True
+
+    def _remove_connection_limit(self):
+        DOCKER_SERVICES.exec_in("ldap", self._rate_rule(self._iptables_burst).replace("-I", "-D"))
+        DOCKER_SERVICES.exec_in("ldap", self._IPTABLES_DROP_RULE.replace("-I", "-D"))
+        self._iptables_active = False
+
+    def _get_ldap_server_status(self):
+        result = self.vk.execute_command("INFO LDAP")
+        status = parse_valkey_info_section(result.decode("utf-8"))
+        for server in status.values():
+            if server.get("host") == "ldap":
+                return server.get("status")
+        return None
+
+    def test_pool_reconstruction_failure_blocks_recovery(self):
+        code, _ = DOCKER_SERVICES.exec_in("ldap", "which iptables")
+        if code != 0:
+            self.skipTest("iptables not available in ldap container")
+
+        self.vk.execute_command("AUTH", "user1", "user1@123")
+
+        service = DOCKER_SERVICES.stop_service("ldap")
+        self._wait_for_ldap_server_status("ldap", "unhealthy")
+
+        DOCKER_SERVICES.restart_service(service)
+
+        # Apply the limit before the port is open so no FD tick can slip
+        # through before the iptables rules are in place.
+        # Allow only 1 new TCP SYN (burst=1) on port 389.
+        # The FD probe's SYN uses the sole burst slot; every pool
+        # construction SYN is rejected, leaving the pool empty.
+        self._apply_connection_limit()
+
+        DOCKER_SERVICES.wait_for_port("ldap", 389)
+
+        # Give the FD several ticks to attempt recovery (interval=1s)
+        time.sleep(6)
+
+        self.assertEqual(
+            self._get_ldap_server_status(), "unhealthy",
+            "server should remain UNHEALTHY when all pool connections fail (0 connections rebuilt)",
+        )
+
+        # Remove the limit — ldap is now fully accessible
+        self._remove_connection_limit()
+
+        # The next successful FD tick should complete pool construction and recover
         self._wait_for_ldap_server_status("ldap", "healthy")
+        self.vk.execute_command("AUTH", "user1", "user1@123")
 
-        stop_worker = True
-        worker_thread.join()
+    def test_partial_pool_reconstruction_recovers(self):
+        # burst=2: the FD probe uses slot 1, one pool connection uses slot 2,
+        # then connections 3-5 are rejected. reset_connections should accept the
+        # partial pool (1 connection) and mark the server HEALTHY rather than
+        # discarding everything and staying UNHEALTHY.
+        code, _ = DOCKER_SERVICES.exec_in("ldap", "which iptables")
+        if code != 0:
+            self.skipTest("iptables not available in ldap container")
 
-        self.assertIsNone(worker_result["error"])
+        self.vk.execute_command("AUTH", "user1", "user1@123")
+
+        service = DOCKER_SERVICES.stop_service("ldap")
+        self._wait_for_ldap_server_status("ldap", "unhealthy")
+
+        DOCKER_SERVICES.restart_service(service)
+        DOCKER_SERVICES.wait_for_port("ldap", 389)
+
+        self._apply_connection_limit(burst=2)
+
+        # With the partial-pool fix the server should recover even though only
+        # 1 of the 5 pool connections could be established.
+        self._wait_for_ldap_server_status("ldap", "healthy")
+        self.vk.execute_command("AUTH", "user1", "user1@123")
+
+        self._remove_connection_limit()
 
 
 class LdapModuleSearchAndBindFailoverTest(LdapModuleFailoverTest):
