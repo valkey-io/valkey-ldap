@@ -14,7 +14,7 @@ pub enum VkLdapError {
     MultipleEntryFound(String),
     InvalidDNAttribute(String),
     NoServerConfigured,
-    NoHealthyServerAvailable,
+    NoHealthyServerAvailable(Vec<(String, String)>),
     FailedToStopFailuredDetectorThread,
     FailedToShutdownJobScheduler,
     FailedToSendJobToScheduler(String),
@@ -79,10 +79,13 @@ impl std::fmt::Display for VkLdapError {
                 f,
                 "no server set in configuration. Please set ldap.servers config option"
             ),
-            VkLdapError::NoHealthyServerAvailable => write!(
-                f,
-                "all servers set in configuration are unhealthy. Please check the logs for more information"
-            ),
+            VkLdapError::NoHealthyServerAvailable(servers) => {
+                let detail: Vec<String> = servers
+                    .iter()
+                    .map(|(url, reason)| format!("{url} ({reason})"))
+                    .collect();
+                write!(f, "all servers are unhealthy: {}", detail.join(", "))
+            }
             VkLdapError::FailedToStopFailuredDetectorThread => write!(
                 f,
                 "failed to wait for the failure detector thread to finish"

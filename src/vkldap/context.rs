@@ -112,13 +112,18 @@ impl VkLdapContext {
             return Err(VkLdapError::NoServerConfigured);
         }
 
+        let mut unhealthy = Vec::new();
         for server in self.servers.iter() {
             if server.is_healthy() {
                 return Ok(server.clone());
             }
+            unhealthy.push((
+                server.get_url_ref().to_string(),
+                server.get_status().to_string(),
+            ));
         }
 
-        Err(VkLdapError::NoHealthyServerAvailable)
+        Err(VkLdapError::NoHealthyServerAvailable(unhealthy))
     }
 }
 
