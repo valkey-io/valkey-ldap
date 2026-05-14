@@ -65,6 +65,7 @@ class LdapTestCase(TestCase):
             "CONFIG", "SET", "ldap.tls_key_path", "/valkey-ldap/valkey-ldap-client.key"
         )
         vk.execute_command("CONFIG", "SET", "ldap.use_starttls", "no")
+        vk.execute_command("CONFIG", "SET", "ldap.return_auth_errors", "no")
 
         # Add users in Valkey
         vk.execute_command("ACL", "SETUSER", "user1", "ON", ">pass", "allcommands")

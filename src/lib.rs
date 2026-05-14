@@ -204,6 +204,13 @@ valkey_module! {
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_connection_setting_change))
             ],
+            [
+                "return_auth_errors",
+                &*configs::LDAP_RETURN_AUTH_ERRORS,
+                false,
+                ConfigurationFlags::DEFAULT,
+                None
+            ],
         ],
         enum: [
             [

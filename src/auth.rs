@@ -26,7 +26,11 @@ fn auth_reply_callback(
             Err(err) => {
                 debug!("failed to authenticate LDAP user {username}");
                 error!("LDAP authentication failure: {err}");
-                Ok(AUTH_NOT_HANDLED)
+                if configs::get_return_auth_errors(ctx) {
+                    Err(ValkeyError::String(err.to_string()))
+                } else {
+                    Ok(AUTH_NOT_HANDLED)
+                }
             }
         }
     } else {
@@ -74,7 +78,11 @@ pub fn ldap_auth_blocking_callback(
         Ok(_) => Ok(AUTH_HANDLED),
         Err(err) => {
             error!("failed to submit ldap bind request: {err}");
-            Ok(AUTH_NOT_HANDLED)
+            if configs::get_return_auth_errors(ctx) {
+                Err(ValkeyError::String(err.to_string()))
+            } else {
+                Ok(AUTH_NOT_HANDLED)
+            }
         }
     }
 }

@@ -3,7 +3,7 @@ from unittest import TestCase
 from threading import Thread
 from urllib.parse import urlparse
 
-from valkey.exceptions import AuthenticationError, ConnectionError
+from valkey.exceptions import AuthenticationError, ConnectionError, ResponseError
 import valkey
 
 from util import DOCKER_SERVICES, LdapTestCase, parse_valkey_info_section
@@ -69,6 +69,14 @@ class LdapModuleBindTest(LdapTestCase):
         with self.assertRaises(AuthenticationError) as ctx:
             self.vk.execute_command("AUTH", "user1", "wrongpass")
 
+    def test_ldap_return_auth_errors(self):
+        self.vk.execute_command("CONFIG", "SET", "ldap.return_auth_errors", "yes")
+
+        with self.assertRaises(ResponseError) as ctx:
+            self.vk.execute_command("AUTH", "user1", "wrongpass")
+
+        self.assertIn("bind operation", str(ctx.exception))
+
     def test_ldap_ssl_auth(self):
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldaps://ldap")
         self.vk.execute_command("AUTH", "user1", "user1@123")
@@ -121,6 +129,14 @@ class LdapModuleBindAndSearchTest(LdapTestCase):
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldaps://ldap")
         with self.assertRaises(AuthenticationError) as ctx:
             self.vk.execute_command("AUTH", "user2", "user2@123")
+
+    def test_ldap_return_auth_errors(self):
+        self.vk.execute_command("CONFIG", "SET", "ldap.return_auth_errors", "yes")
+
+        with self.assertRaises(ResponseError) as ctx:
+            self.vk.execute_command("AUTH", "u2", "wrongpass")
+
+        self.assertIn("bind operation", str(ctx.exception))
 
     def test_ldap_bind_password_hidden(self):
         res = self.vk.execute_command("CONFIG", "GET", "ldap.search_bind_passwd")

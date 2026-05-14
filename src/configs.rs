@@ -106,6 +106,7 @@ lazy_static! {
     pub static ref LDAP_FAILURE_DETECTOR_INTERVAL: ValkeyGILGuard<i64> = ValkeyGILGuard::new(1);
     pub static ref LDAP_TIMEOUT_CONNECTION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
     pub static ref LDAP_TIMEOUT_LDAP_OPERATION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
+    pub static ref LDAP_RETURN_AUTH_ERRORS: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
 }
 
 pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
@@ -339,4 +340,9 @@ pub fn get_timeout_connection<T: ValkeyLockIndicator>(ctx: &T) -> Duration {
 pub fn get_timeout_ldap_operation<T: ValkeyLockIndicator>(ctx: &T) -> Duration {
     let timeout = LDAP_TIMEOUT_LDAP_OPERATION.lock(ctx);
     Duration::from_secs(*timeout as u64)
+}
+
+pub fn get_return_auth_errors<T: ValkeyLockIndicator>(ctx: &T) -> bool {
+    let return_errors = LDAP_RETURN_AUTH_ERRORS.lock(ctx);
+    *return_errors
 }
