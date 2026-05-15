@@ -51,6 +51,7 @@ After creating the above user `bob` in Valkey, it will only be possible to authe
 | ------------|------|---------|-------------|
 | `ldap.auth_mode` | Enum(`bind`, `search+bind`) | `bind` | The authentication method. Check the [Authentication Modes](#ldap-authentication-modes) section for more information about the differences. |
 | `ldap.servers` | string | `""` | Comma separated list of LDAP URLs of the form `ldap[s]://<domain>:<port>`. |
+| `ldap.return_auth_errors` | boolean | `no` | Whether to return the LDAP authentication error on `AUTH` failures. If enabled, will end the auth chain if using multiple authentication modules |
 
 ### TLS Options
 
