@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.0] - 2026-05-21
 
+### Added
+
+- We can now return the actual authentication error as the response of
+  AUTH command, when the new config variable `return_auth_errors` is
+  enabled.
+  When `return_auth_errors` is disabled, the default behavior of 
+  returning `WRONGPASS` error is kept. (PR #65)
+
 ### Changed
 
 - Fixed bug in CONFIG REWRITE that would always re-write the `ldap.search_bind_passwd`
