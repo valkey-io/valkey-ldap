@@ -7,10 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-05-21
+
 ### Changed
 
 - Fixed bug in CONFIG REWRITE that would always re-write the `ldap.search_bind_passwd`
-  config with an obfuscated value
+  config with an obfuscated value (PR #54)
+
+- Fixed connection pool reconstruction to continue after a failed connection in pool (PR #60)
+
+- Fixed NULL bytes in logging messages that may cause the module to crash (PR #63)
+
+- Improve failure reason logging on LDAP connection failures (PR #60)
 
 ## [1.0.0] - 2025-06-13
 
@@ -25,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial version of an LDAP authentication module for Valkey 7.2.X or above
 
 
-[unreleased]: https://github.com/valkey-io/valkey-ldap/compare/1.0.0...HEAD
+[unreleased]: https://github.com/valkey-io/valkey-ldap/compare/1.0.1...HEAD
+[1.0.1]: https://github.com/valkey-io/valkey-ldap/releases/tag/1.0.1
 [1.0.0]: https://github.com/valkey-io/valkey-ldap/releases/tag/1.0.0
 [1.0.0_rc1]: https://github.com/valkey-io/valkey-ldap/releases/tag/v1.0.0-rc1
