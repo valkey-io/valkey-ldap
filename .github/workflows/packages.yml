@@ -37,7 +37,7 @@ jobs:
       deb-matrix: ${{ steps.matrix.outputs.deb }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Determine version
         id: version
@@ -79,10 +79,10 @@ jobs:
       MODULE_VERSION: ${{ needs.process-inputs.outputs.version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8
         with:
           toolchain: 1.87.0
 
@@ -98,7 +98,7 @@ jobs:
           tar czf "${SRCDIR}.tar.gz" "${SRCDIR}"
 
       - name: Upload source tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: source-tarball
           path: /tmp/valkey-ldap-${{ env.MODULE_VERSION }}.tar.gz
@@ -118,10 +118,10 @@ jobs:
       PKG_NAME: ${{ needs.process-inputs.outputs.pkg_name }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Download source tarball
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: source-tarball
           path: ./source
@@ -145,7 +145,7 @@ jobs:
             bash /scripts/build-container-rpm.sh
 
       - name: Upload RPM artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: rpm-${{ matrix.platform_id }}-${{ matrix.arch }}
           path: ./output/*.rpm
@@ -164,10 +164,10 @@ jobs:
       MODULE_VERSION: ${{ needs.process-inputs.outputs.version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Download source tarball
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: source-tarball
           path: ./source
@@ -190,7 +190,7 @@ jobs:
             bash /scripts/build-container-deb.sh
 
       - name: Upload DEB artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: deb-${{ matrix.platform_id }}-${{ matrix.arch }}
           path: ./output/valkey-ldap_*
@@ -207,10 +207,10 @@ jobs:
         include: ${{ fromJson(needs.process-inputs.outputs.rpm-matrix) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Download RPM artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: rpm-${{ matrix.platform_id }}-${{ matrix.arch }}
           path: ./packages
@@ -242,10 +242,10 @@ jobs:
         include: ${{ fromJson(needs.process-inputs.outputs.deb-matrix) }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
 
       - name: Download DEB artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: deb-${{ matrix.platform_id }}-${{ matrix.arch }}
           path: ./packages
