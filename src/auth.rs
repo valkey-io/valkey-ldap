@@ -51,11 +51,11 @@ fn apply_ldap_user_acl(
             debug!("successfully authenticated LDAP user {username}");
             Ok(AUTH_HANDLED)
         }
-        Status::Err(err) => {
+        Status::Err => {
             debug!("failed to authenticate LDAP user {username}");
-            error!("LDAP authentication failure: {err}");
+            error!("LDAP authentication failure");
             if configs::get_return_auth_errors(ctx) {
-                Err(ValkeyError::String(err.to_string()))
+                Err(ValkeyError::Str("LDAP authentication failure"))
             } else {
                 Ok(AUTH_NOT_HANDLED)
             }

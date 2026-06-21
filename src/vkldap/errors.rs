@@ -83,7 +83,7 @@ impl VkLdapError {
     pub fn is_server_unavailable(&self) -> bool {
         matches!(
             self,
-            VkLdapError::NoHealthyServerAvailable
+            VkLdapError::NoHealthyServerAvailable(_)
                 | VkLdapError::LdapConnectionError(_)
                 | VkLdapError::NoServerConfigured
                 | VkLdapError::SchedulerNotReady
