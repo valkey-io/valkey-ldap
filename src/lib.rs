@@ -7,11 +7,7 @@ mod vkldap;
 
 use log::error;
 use valkey_module::{
-    Context,
-    Status,
-    ValkeyString,
-    configuration::ConfigurationFlags,
-    valkey_module,
+    Context, Status, ValkeyString, configuration::ConfigurationFlags, valkey_module,
 };
 
 use auth::ldap_auth_blocking_callback;

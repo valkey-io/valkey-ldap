@@ -1,8 +1,8 @@
 use std::os::raw::c_int;
 
-use log::{ debug, error };
+use log::{debug, error};
 use valkey_module::BlockedClient;
-use valkey_module::{ AUTH_HANDLED, AUTH_NOT_HANDLED, Context, Status, ValkeyError, ValkeyString };
+use valkey_module::{AUTH_HANDLED, AUTH_NOT_HANDLED, Context, Status, ValkeyError, ValkeyString};
 
 use crate::configs;
 use crate::vkldap;
@@ -13,7 +13,7 @@ fn apply_ldap_user_acl(
     ctx: &Context,
     username: &ValkeyString,
     password: &ValkeyString,
-    ldap_tokens: &[String]
+    ldap_tokens: &[String],
 ) -> Result<c_int, ValkeyError> {
     // Build ACL rules: reset commands/keys/channels + defaults + LDAP-provided tokens
     let mut rule_tokens: Vec<String> = Vec::new();
@@ -40,10 +40,7 @@ fn apply_ldap_user_acl(
     args.push(uname.clone());
     args.extend(rule_tokens);
 
-    let arg_refs: Vec<&str> = args
-        .iter()
-        .map(|s| s.as_str())
-        .collect();
+    let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     if let Err(e) = ctx.call("ACL", &arg_refs[..]) {
         error!("failed to set ACL for user {uname}: {e}");
         return Err(ValkeyError::Str("Failed to apply ACL rules"));
@@ -122,7 +119,7 @@ fn auth_reply_callback(
     ctx: &Context,
     username: ValkeyString,
     password: ValkeyString,
-    priv_data: Option<&Result<Vec<String>, VkLdapError>>
+    priv_data: Option<&Result<Vec<String>, VkLdapError>>,
 ) -> Result<c_int, ValkeyError> {
     let result = match priv_data {
         Some(Ok(ldap_tokens)) => {
@@ -143,7 +140,9 @@ fn auth_reply_callback(
                 handle_credential_rejection(ctx, &uname)
             }
         }
-        None => Err(ValkeyError::Str("Unknown error during authentication, check the server logs")),
+        None => Err(ValkeyError::Str(
+            "Unknown error during authentication, check the server logs",
+        )),
     };
 
     result
@@ -154,7 +153,7 @@ fn free_callback(_: &Context, _: Result<Vec<String>, VkLdapError>) {}
 pub fn ldap_auth_blocking_callback(
     ctx: &Context,
     username: ValkeyString,
-    password: ValkeyString
+    password: ValkeyString,
 ) -> Result<c_int, ValkeyError> {
     if !configs::is_auth_enabled(ctx) {
         return Ok(AUTH_NOT_HANDLED);
@@ -176,16 +175,14 @@ pub fn ldap_auth_blocking_callback(
 
     let blocked_client = ctx.block_client_on_auth(auth_reply_callback, Some(free_callback));
 
-    let callback = move |
-        blocked_client: Option<BlockedClient<Result<Vec<String>, VkLdapError>>>,
-        result
-    | {
-        assert!(blocked_client.is_some());
-        let mut blocked_client = blocked_client.unwrap();
-        if let Err(e) = blocked_client.set_blocked_private_data(result) {
-            error!("failed to set the auth callback result: {e}");
-        }
-    };
+    let callback =
+        move |blocked_client: Option<BlockedClient<Result<Vec<String>, VkLdapError>>>, result| {
+            assert!(blocked_client.is_some());
+            let mut blocked_client = blocked_client.unwrap();
+            if let Err(e) = blocked_client.set_blocked_private_data(result) {
+                error!("failed to set the auth callback result: {e}");
+            }
+        };
 
     let res = if use_bind_mode {
         vkldap::vk_ldap_bind_and_group_rules(user_str, pass_str, callback, blocked_client)
