@@ -23,6 +23,9 @@ class DockerServices:
         ct = self._find_container(name)
         if ct is None:
             return None
+        ct.reload()
+        if ct.status != "running":
+            return ct
         ct.kill()
         return ct
 
