@@ -93,11 +93,13 @@ impl VkLdapContext {
             return ();
         }
 
-        let server = &mut self.servers[server.get_id()];
-        if server.get_url_ref() != server.get_url_ref() {
+        // Guard: the slot may have been replaced by a different server since
+        // the caller took a snapshot (e.g. after ldap.servers was reconfigured).
+        if self.servers[server.get_id()].get_url_ref() != server.get_url_ref() {
             return ();
         }
 
+        let server = &mut self.servers[server.get_id()];
         if server.get_status() != status {
             let pre_status = server.get_status();
             let url = server.get_url_ref();
@@ -115,13 +117,18 @@ impl VkLdapContext {
             return Err(VkLdapError::NoServerConfigured);
         }
 
+        let mut unhealthy = Vec::new();
         for server in self.servers.iter() {
             if server.is_healthy() {
                 return Ok(server.clone());
             }
+            unhealthy.push((
+                server.get_url_ref().to_string(),
+                server.get_status().to_string(),
+            ));
         }
 
-        Err(VkLdapError::NoHealthyServerAvailable)
+        Err(VkLdapError::NoHealthyServerAvailable(unhealthy))
     }
 }
 

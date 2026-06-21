@@ -7,7 +7,11 @@ mod vkldap;
 
 use log::error;
 use valkey_module::{
-    Context, Status, ValkeyString, configuration::ConfigurationFlags, valkey_module,
+    Context,
+    Status,
+    ValkeyString,
+    configuration::ConfigurationFlags,
+    valkey_module,
 };
 
 use auth::ldap_auth_blocking_callback;
@@ -303,6 +307,13 @@ valkey_module! {
             [
                 "acl_fallback_enabled",
                 &*configs::LDAP_ACL_FALLBACK_ENABLED,
+                false,
+                ConfigurationFlags::DEFAULT,
+                None
+            ],
+            [
+                "return_auth_errors",
+                &*configs::LDAP_RETURN_AUTH_ERRORS,
                 false,
                 ConfigurationFlags::DEFAULT,
                 None

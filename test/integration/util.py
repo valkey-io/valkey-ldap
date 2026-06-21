@@ -1,3 +1,4 @@
+import time
 from unittest import TestCase
 import docker
 import valkey
@@ -28,6 +29,20 @@ class DockerServices:
     def restart_service(self, serv):
         serv.restart()
 
+    def exec_in(self, name: str, cmd: str):
+        ct = self._find_container(name)
+        if ct is None:
+            raise RuntimeError(f"Container '{name}' not found")
+        result = ct.exec_run(["bash", "-c", cmd], user="root")
+        return result.exit_code, result.output
+
+    def wait_for_port(self, name: str, port: int):
+        while True:
+            code, _ = self.exec_in(name, f"bash -c 'echo > /dev/tcp/localhost/{port}' 2>/dev/null")
+            if code == 0:
+                return
+            time.sleep(0.5)
+
 
 DOCKER_SERVICES = DockerServices()
 
@@ -50,6 +65,7 @@ class LdapTestCase(TestCase):
             "CONFIG", "SET", "ldap.tls_key_path", "/valkey-ldap/valkey-ldap-client.key"
         )
         vk.execute_command("CONFIG", "SET", "ldap.use_starttls", "no")
+        vk.execute_command("CONFIG", "SET", "ldap.return_auth_errors", "no")
 
         # Set search base for group rules search (needed even in bind mode)
         vk.execute_command("CONFIG", "SET", "ldap.search_base", "dc=valkey,dc=io")

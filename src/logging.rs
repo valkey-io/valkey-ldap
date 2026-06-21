@@ -37,7 +37,10 @@ pub(crate) fn log_internal<L: Into<ValkeyLogLevel>>(
     }
 
     let level = CString::new(level.into().as_ref()).unwrap();
-    let fmt = CString::new(message).unwrap();
+    // Strip NUL bytes so attacker-controlled input (e.g. usernames) cannot
+    // cause CString::new to panic and crash the server.
+    let sanitized: String = message.chars().filter(|&c| c != '\0').collect();
+    let fmt = CString::new(sanitized).unwrap();
     unsafe {
         raw::RedisModule_Log.expect(NOT_INITIALISED_MESSAGE)(ctx, level.as_ptr(), fmt.as_ptr())
     }

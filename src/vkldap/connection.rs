@@ -52,8 +52,13 @@ impl ConnectionQueue {
             match VkLdapConnection::new(&settings, server).await {
                 Ok(conn) => self.queue.push_front(conn),
                 Err(err) => {
-                    self.close_connections().await;
-                    return Err(err);
+                    if self.queue.is_empty() {
+                        return Err(err);
+                    }
+                    // Partial success: keep what connected and shrink the pool
+                    // to match. A later refresh will try to grow it back to full size.
+                    self.size = self.queue.len();
+                    break;
                 }
             }
         }
