@@ -1,0 +1,23 @@
+Source: valkey-ldap
+Section: database
+Priority: optional
+Maintainer: Valkey Contributors <valkey@lists.valkey.io>
+Build-Depends: debhelper-compat (= 13),
+               libssl-dev,
+               libldap-dev | libldap2-dev,
+               libclang-dev,
+               curl,
+               ca-certificates,
+               pkg-config
+Standards-Version: 4.6.2
+Homepage: https://github.com/valkey-io/valkey-ldap
+Rules-Requires-Root: no
+
+Package: valkey-ldap
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: valkey-server (>= 7.2) | valkey (>= 7.2)
+Description: LDAP authentication module for Valkey
+ An LDAP authentication module for Valkey that provides external
+ authentication and authorization via LDAP directories. Supports
+ TLS, connection pooling, and group-based access control.

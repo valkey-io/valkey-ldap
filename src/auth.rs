@@ -51,7 +51,15 @@ fn apply_ldap_user_acl(
             debug!("successfully authenticated LDAP user {username}");
             Ok(AUTH_HANDLED)
         }
-        Status::Err => Err(ValkeyError::Str("Failed to authenticate with ACL")),
+        Status::Err => {
+            debug!("failed to authenticate LDAP user {username}");
+            error!("LDAP authentication failure");
+            if configs::get_return_auth_errors(ctx) {
+                Err(ValkeyError::Str("LDAP authentication failure"))
+            } else {
+                Ok(AUTH_NOT_HANDLED)
+            }
+        }
     }
 }
 
@@ -71,20 +79,33 @@ fn handle_user_not_found(ctx: &Context, username: &str) -> Result<c_int, ValkeyE
 }
 
 /// Handle the case where the LDAP server is unavailable
-fn handle_server_unavailable(ctx: &Context, username: &str) -> Result<c_int, ValkeyError> {
+fn handle_server_unavailable(
+    ctx: &Context,
+    username: &str,
+    err: &VkLdapError,
+) -> Result<c_int, ValkeyError> {
     if configs::is_acl_fallback_enabled(ctx) {
         debug!("LDAP server unavailable, falling back to ACL authentication for user {username}");
         Ok(AUTH_NOT_HANDLED)
+    } else if configs::get_return_auth_errors(ctx) {
+        debug!(
+            "LDAP server unavailable and return_auth_errors enabled, returning LDAP error for user {username}"
+        );
+        Err(ValkeyError::String(err.to_string()))
     } else {
         debug!(
             "LDAP server unavailable and fallback disabled, rejecting authentication for user {username}"
         );
-        Err(ValkeyError::Str("LDAP server unavailable"))
+        Err(ValkeyError::String("LDAP server unavailable".to_string()))
     }
 }
 
 /// Handle the case where LDAP rejects the credentials
-fn handle_credential_rejection(ctx: &Context, username: &str) -> Result<c_int, ValkeyError> {
+fn handle_credential_rejection(
+    ctx: &Context,
+    username: &str,
+    err: &VkLdapError,
+) -> Result<c_int, ValkeyError> {
     // When credentials are rejected, we need to decide whether to delete the user or just clear the password.
     // In bind mode: LDAP error 49 (invalidCredentials) doesn't distinguish between:
     //   - User doesn't exist in LDAP (should delete from ACL)
@@ -104,7 +125,11 @@ fn handle_credential_rejection(ctx: &Context, username: &str) -> Result<c_int, V
         }
     }
 
-    Err(ValkeyError::Str("LDAP authentication failed"))
+    if configs::get_return_auth_errors(ctx) {
+        Err(ValkeyError::String(err.to_string()))
+    } else {
+        Ok(AUTH_NOT_HANDLED)
+    }
 }
 
 fn auth_reply_callback(
@@ -127,9 +152,9 @@ fn auth_reply_callback(
             if err.is_user_not_found() {
                 handle_user_not_found(ctx, &uname)
             } else if err.is_server_unavailable() {
-                handle_server_unavailable(ctx, &uname)
+                handle_server_unavailable(ctx, &uname, err)
             } else {
-                handle_credential_rejection(ctx, &uname)
+                handle_credential_rejection(ctx, &uname, err)
             }
         }
         None => Err(ValkeyError::Str(
@@ -186,7 +211,11 @@ pub fn ldap_auth_blocking_callback(
         Ok(_) => Ok(AUTH_HANDLED),
         Err(err) => {
             error!("failed to submit ldap bind request: {err}");
-            Ok(AUTH_NOT_HANDLED)
+            if configs::get_return_auth_errors(ctx) {
+                Err(ValkeyError::String(err.to_string()))
+            } else {
+                Ok(AUTH_NOT_HANDLED)
+            }
         }
     }
 }

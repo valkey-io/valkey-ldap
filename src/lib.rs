@@ -307,6 +307,13 @@ valkey_module! {
                 ConfigurationFlags::DEFAULT,
                 None
             ],
+            [
+                "return_auth_errors",
+                &*configs::LDAP_RETURN_AUTH_ERRORS,
+                false,
+                ConfigurationFlags::DEFAULT,
+                None
+            ],
         ],
         enum: [
             [

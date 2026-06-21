@@ -109,6 +109,7 @@ lazy_static! {
     pub static ref LDAP_FAILURE_DETECTOR_INTERVAL: ValkeyGILGuard<i64> = ValkeyGILGuard::new(1);
     pub static ref LDAP_TIMEOUT_CONNECTION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(2);
     pub static ref LDAP_TIMEOUT_LDAP_OPERATION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(2);
+    pub static ref LDAP_RETURN_AUTH_ERRORS: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
     // Group/authorization configs
     pub static ref LDAP_GROUPS_SEARCH_BASE: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
@@ -528,4 +529,9 @@ pub fn exempted_users_regex_set_callback(
             )))
         }
     }
+}
+
+pub fn get_return_auth_errors<T: ValkeyLockIndicator>(ctx: &T) -> bool {
+    let return_errors = LDAP_RETURN_AUTH_ERRORS.lock(ctx);
+    *return_errors
 }
