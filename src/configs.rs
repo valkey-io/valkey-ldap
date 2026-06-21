@@ -529,6 +529,7 @@ pub fn exempted_users_regex_set_callback(
             )))
         }
     }
+}
 
 pub fn get_return_auth_errors<T: ValkeyLockIndicator>(ctx: &T) -> bool {
     let return_errors = LDAP_RETURN_AUTH_ERRORS.lock(ctx);
