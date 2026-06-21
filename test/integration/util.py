@@ -14,7 +14,7 @@ class DockerServices:
             assert ct.status == "running"
 
     def _find_container(self, name: str):
-        for ct in self.client.containers.list():
+        for ct in self.client.containers.list(all=True):
             if ct.name == name:
                 return ct
         return None
@@ -27,6 +27,8 @@ class DockerServices:
         return ct
 
     def restart_service(self, serv):
+        if serv is None:
+            raise RuntimeError("Cannot restart an unknown container")
         serv.restart()
 
     def exec_in(self, name: str, cmd: str):
