@@ -96,7 +96,7 @@ fn handle_server_unavailable(
         debug!(
             "LDAP server unavailable and fallback disabled, rejecting authentication for user {username}"
         );
-        Ok(AUTH_NOT_HANDLED)
+        Err(ValkeyError::String("LDAP server unavailable".to_string()))
     }
 }
 
