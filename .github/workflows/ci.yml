@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        valkey_version: ["7.2", "8.0", "8.1"]
+        valkey_version: ["7.2", "8.0", "8.1", "9.0", "9.1"]
     env:
       PYTHONUNBUFFERED: 1
     steps:
@@ -75,7 +75,7 @@ jobs:
         if: steps.filter.outputs.code_changed == 'true'
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: "3.13"
 
       - name: Install Python test dependencies
         if: steps.filter.outputs.code_changed == 'true'
@@ -102,4 +102,3 @@ jobs:
       - name: Stop Valkey and LDAP services
         if: steps.filter.outputs.code_changed == 'true'
         run: ./scripts/stop_valkey_ldap.sh
-
