@@ -14,6 +14,11 @@ crate-type = ["cdylib"]
 
 [features]
 default = ["min-valkey-compatibility-version-8-0"]
+# When enabled, LDAP config names are registered with an `ldap_` prefix so a
+# host module embedding this crate exposes them grouped under `<host>.ldap_*`
+# (e.g. `falkordbe.ldap_servers`). Standalone builds leave this off and keep
+# `ldap.*`.
+embed = []
 enable-system-alloc = ["valkey-module/enable-system-alloc"]
 min-redis-compatibility-version-7-2 = ["valkey-module/min-redis-compatibility-version-7-2"]
 min-valkey-compatibility-version-8-0 = ["valkey-module/min-valkey-compatibility-version-8-0"]

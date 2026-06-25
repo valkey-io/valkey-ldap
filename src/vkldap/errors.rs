@@ -96,7 +96,8 @@ impl std::fmt::Display for VkLdapError {
         match self {
             VkLdapError::NoTLSKeyPathSet => write!(
                 f,
-                "no TLS key path specified. Please set the path for ldap.tls_key_path config"
+                "no TLS key path specified. Please set the '{}' config",
+                cfg_name!("tls_key_path")
             ),
             VkLdapError::IOError(msg, ioerr) => write!(f, "{msg}: {ioerr}"),
             VkLdapError::TLSError(msg, tlserr) => write!(f, "{msg}: {tlserr}"),
@@ -137,7 +138,8 @@ impl std::fmt::Display for VkLdapError {
             }
             VkLdapError::NoServerConfigured => write!(
                 f,
-                "no server set in configuration. Please set ldap.servers config option"
+                "no server set in configuration. Please set the '{}' config option",
+                cfg_name!("servers")
             ),
             VkLdapError::NoHealthyServerAvailable(servers) => {
                 let detail: Vec<String> = servers
