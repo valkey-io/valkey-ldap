@@ -55,6 +55,15 @@
       "arch": ["x86_64", "aarch64"]
     },
     {
+      "platform_id": "rockylinux-10",
+      "family": "rhel",
+      "image": "rockylinux/rockylinux:10",
+      "arch": [
+        "x86_64",
+        "aarch64"
+      ]
+    },
+    {
       "platform_id": "almalinux-8",
       "family": "rhel",
       "image": "almalinux:8",
