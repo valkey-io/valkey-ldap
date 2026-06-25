@@ -1,3 +1,35 @@
+// Configuration name helper — the single source of truth for LDAP config names.
+//
+// A Valkey/Redis module exposes its configs as `<module-name>.<config-name>`.
+// When valkey-ldap runs standalone the module name is `ldap`, so the configs
+// are `ldap.servers`, `ldap.search_base`, etc.
+//
+// When this crate is embedded into another module (the `embed` feature, used
+// by FalkorDB Enterprise) the host module owns the name. Redis does not allow
+// a `.` inside a module config name, so a true `<host>.ldap.<name>` subkey is
+// impossible; instead each name is prefixed with `ldap_` to keep the LDAP
+// settings grouped under a common, glob-friendly prefix. The host then exposes
+// them as `<host>.ldap_<name>` (e.g. `falkordbe.ldap_servers`).
+//
+// This macro yields the *registered* config name (the part after the host
+// module prefix). It is used both when registering the configs (see the
+// `valkey_module!` block below) and when referring to a config in user-facing
+// messages, so the two never drift apart. The module-name portion is
+// deliberately not included here since it is host-defined in embed mode.
+#[cfg(feature = "embed")]
+macro_rules! cfg_name {
+    ($n:literal) => {
+        concat!("ldap_", $n)
+    };
+}
+
+#[cfg(not(feature = "embed"))]
+macro_rules! cfg_name {
+    ($n:literal) => {
+        $n
+    };
+}
+
 mod auth;
 mod commands;
 mod configs;
@@ -82,32 +114,6 @@ fn deinitializer(ctx: &Context) -> Status {
     standard_log_implementation::teardown();
 
     Status::Ok
-}
-
-// Configuration name helper.
-//
-// A Valkey/Redis module exposes its configs as `<module-name>.<config-name>`.
-// When valkey-ldap runs standalone the module name is `ldap`, so the configs
-// are `ldap.servers`, `ldap.search_base`, etc.
-//
-// When this crate is embedded into another module (the `embed` feature, used
-// by FalkorDB Enterprise) the host module owns the name. Redis does not allow
-// a `.` inside a module config name, so a true `<host>.ldap.<name>` subkey is
-// impossible; instead each name is prefixed with `ldap_` to keep the LDAP
-// settings grouped under a common, glob-friendly prefix. The host then exposes
-// them as `<host>.ldap_<name>` (e.g. `falkordbe.ldap_servers`).
-#[cfg(feature = "embed")]
-macro_rules! cfg_name {
-    ($n:literal) => {
-        concat!("ldap_", $n)
-    };
-}
-
-#[cfg(not(feature = "embed"))]
-macro_rules! cfg_name {
-    ($n:literal) => {
-        $n
-    };
 }
 
 valkey_module! {
