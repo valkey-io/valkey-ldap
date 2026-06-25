@@ -1,82 +1,101 @@
 name: valkey-ldap
 services:
   ldap:
-    build:
-      dockerfile: Dockerfile-ldap
-      context: ./
     image: valkey-ldap-openldap
-    profiles: ["valkey-7.2", "valkey-8.0", "valkey-8.1"]
+    profiles:
+      ["valkey-7.2", "valkey-8.0", "valkey-8.1", "valkey-9.0", "valkey-9.1"]
     container_name: ldap
     cap_add:
-        - NET_ADMIN
+      - NET_ADMIN
     environment:
-        - LDAP_ORGANISATION=valkey
-        - LDAP_DOMAIN=valkey.io
-        - LDAP_BASE_DN=dc=valkey,dc=io
-        - LDAP_ADMIN_PASSWORD=admin123!
-        - LDAP_TLS_CRT_FILENAME=valkey-ldap.crt
-        - LDAP_TLS_KEY_FILENAME=valkey-ldap.key
-        - LDAP_TLS_CA_CRT_FILENAME=valkey-ldap-ca.crt
+      - LDAP_ORGANISATION=valkey
+      - LDAP_DOMAIN=valkey.io
+      - LDAP_BASE_DN=dc=valkey,dc=io
+      - LDAP_ADMIN_PASSWORD=admin123!
+      - LDAP_TLS_CRT_FILENAME=valkey-ldap.crt
+      - LDAP_TLS_KEY_FILENAME=valkey-ldap.key
+      - LDAP_TLS_CA_CRT_FILENAME=valkey-ldap-ca.crt
     ports:
-        - 389:389
-        - 636:636
+      - 389:389
+      - 636:636
     volumes:
-        - ./certs:/container/service/slapd/assets/certs
+      - ./certs:/container/service/slapd/assets/certs
 
   ldap-2:
     image: valkey-ldap-openldap
-    profiles: ["valkey-7.2", "valkey-8.0", "valkey-8.1"]
+    profiles:
+      ["valkey-7.2", "valkey-8.0", "valkey-8.1", "valkey-9.0", "valkey-9.1"]
     container_name: ldap-2
     environment:
-        - LDAP_ORGANISATION=valkey
-        - LDAP_DOMAIN=valkey.io
-        - LDAP_BASE_DN=dc=valkey,dc=io
-        - LDAP_ADMIN_PASSWORD=admin123!
-        - LDAP_TLS_CRT_FILENAME=valkey-ldap.crt
-        - LDAP_TLS_KEY_FILENAME=valkey-ldap.key
-        - LDAP_TLS_CA_CRT_FILENAME=valkey-ldap-ca.crt
+      - LDAP_ORGANISATION=valkey
+      - LDAP_DOMAIN=valkey.io
+      - LDAP_BASE_DN=dc=valkey,dc=io
+      - LDAP_ADMIN_PASSWORD=admin123!
+      - LDAP_TLS_CRT_FILENAME=valkey-ldap.crt
+      - LDAP_TLS_KEY_FILENAME=valkey-ldap.key
+      - LDAP_TLS_CA_CRT_FILENAME=valkey-ldap-ca.crt
     ports:
-        - 390:389
-        - 637:636
+      - 390:389
+      - 637:636
     volumes:
-        - ./certs:/container/service/slapd/assets/certs
+      - ./certs:/container/service/slapd/assets/certs
 
   valkey-7.2:
     hostname: valkey
-    build:
-      dockerfile: Dockerfile-valkey-ldap-7.2
-      context: ./
-    image: valkey-ldap-7.2
+    image: valkey/valkey:7.2
+    working_dir: /valkey-ldap
+    command: valkey-server valkey.conf
     profiles: ["valkey-7.2"]
     container_name: valkey
     ports:
-        - 6379:6379
+      - 6379:6379
     volumes:
-        - ../../target/debug:/valkey-ldap
+      - ../../target/debug:/valkey-ldap
 
   valkey-8.0:
     hostname: valkey
-    build:
-      dockerfile: Dockerfile-valkey-ldap-8.0
-      context: ./
-    image: valkey-ldap-8.0
+    image: valkey/valkey:8.0
+    working_dir: /valkey-ldap
+    command: valkey-server valkey.conf
     profiles: ["valkey-8.0"]
     container_name: valkey
     ports:
-        - 6379:6379
+      - 6379:6379
     volumes:
-        - ../../target/debug:/valkey-ldap
+      - ../../target/debug:/valkey-ldap
 
   valkey-8.1:
     hostname: valkey
-    build:
-      dockerfile: Dockerfile-valkey-ldap-8.1
-      context: ./
-    image: valkey-ldap-8.1
+    image: valkey/valkey:8.1
+    working_dir: /valkey-ldap
+    command: valkey-server valkey.conf
     profiles: ["valkey-8.1"]
     container_name: valkey
     ports:
-        - 6379:6379
+      - 6379:6379
     volumes:
-        - ../../target/debug:/valkey-ldap
+      - ../../target/debug:/valkey-ldap
 
+  valkey-9.0:
+    hostname: valkey
+    image: valkey/valkey:9.0
+    working_dir: /valkey-ldap
+    command: valkey-server valkey.conf
+    profiles: ["valkey-8.1"]
+    container_name: valkey
+    ports:
+      - 6379:6379
+    volumes:
+      - ../../target/debug:/valkey-ldap
+
+  valkey-9.1:
+    hostname: valkey
+    image: valkey/valkey:9.1
+    working_dir: /valkey-ldap
+    command: valkey-server valkey.conf
+    profiles: ["valkey-8.1"]
+    container_name: valkey
+    ports:
+      - 6379:6379
+    volumes:
+      - ../../target/debug:/valkey-ldap
