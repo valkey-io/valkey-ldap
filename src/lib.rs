@@ -84,6 +84,32 @@ fn deinitializer(ctx: &Context) -> Status {
     Status::Ok
 }
 
+// Configuration name helper.
+//
+// A Valkey/Redis module exposes its configs as `<module-name>.<config-name>`.
+// When valkey-ldap runs standalone the module name is `ldap`, so the configs
+// are `ldap.servers`, `ldap.search_base`, etc.
+//
+// When this crate is embedded into another module (the `embed` feature, used
+// by FalkorDB Enterprise) the host module owns the name. Redis does not allow
+// a `.` inside a module config name, so a true `<host>.ldap.<name>` subkey is
+// impossible; instead each name is prefixed with `ldap_` to keep the LDAP
+// settings grouped under a common, glob-friendly prefix. The host then exposes
+// them as `<host>.ldap_<name>` (e.g. `falkordbe.ldap_servers`).
+#[cfg(feature = "embed")]
+macro_rules! cfg_name {
+    ($n:literal) => {
+        concat!("ldap_", $n)
+    };
+}
+
+#[cfg(not(feature = "embed"))]
+macro_rules! cfg_name {
+    ($n:literal) => {
+        $n
+    };
+}
+
 valkey_module! {
     name: "ldap",
     version: module_version(),
@@ -98,7 +124,7 @@ valkey_module! {
     configurations: [
         i64: [
             [
-                "connection_pool_size",
+                cfg_name!("connection_pool_size"),
                 &*configs::LDAP_CONNECTION_POOL_SIZE,
                 2,
                 1,
@@ -107,7 +133,7 @@ valkey_module! {
                 Some(Box::new(configs::on_connection_setting_change))
             ],
             [
-                "failure_detector_interval",
+                cfg_name!("failure_detector_interval"),
                 &*configs::LDAP_FAILURE_DETECTOR_INTERVAL,
                 1,
                 0,
@@ -116,7 +142,7 @@ valkey_module! {
                 Some(Box::new(configs::failure_detector_interval_changed))
             ],
             [
-                "timeout_connection",
+                cfg_name!("timeout_connection"),
                 &*configs::LDAP_TIMEOUT_CONNECTION,
                 10,
                 0,
@@ -125,7 +151,7 @@ valkey_module! {
                 Some(Box::new(configs::on_connection_setting_change))
             ],
             [
-                "timeout_ldap_operation",
+                cfg_name!("timeout_ldap_operation"),
                 &*configs::LDAP_TIMEOUT_LDAP_OPERATION,
                 10,
                 0,
@@ -136,7 +162,7 @@ valkey_module! {
         ],
         string: [
             [
-                "servers",
+                cfg_name!("servers"),
                 &*configs::LDAP_SERVER_LIST,
                 "",
                 ConfigurationFlags::DEFAULT,
@@ -144,140 +170,140 @@ valkey_module! {
                 Some(Box::new(configs::ldap_server_list_set_callback))
             ],
             [
-                "bind_dn_prefix",
+                cfg_name!("bind_dn_prefix"),
                 &*configs::LDAP_BIND_DN_PREFIX,
                 "cn=",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "bind_dn_suffix",
+                cfg_name!("bind_dn_suffix"),
                 &*configs::LDAP_BIND_DN_SUFFIX,
                 "",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "tls_ca_cert_path",
+                cfg_name!("tls_ca_cert_path"),
                 &*configs::LDAP_TLS_CA_CERT_PATH,
                 "",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_connection_setting_change))
             ],
             [
-                "tls_cert_path",
+                cfg_name!("tls_cert_path"),
                 &*configs::LDAP_TLS_CERT_PATH,
                 "",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_connection_setting_change))
             ],
             [
-                "tls_key_path",
+                cfg_name!("tls_key_path"),
                 &*configs::LDAP_TLS_KEY_PATH,
                 "",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_connection_setting_change))
             ],
             [
-                "search_base",
+                cfg_name!("search_base"),
                 &*configs::LDAP_SEARCH_BASE,
                 "",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "search_filter",
+                cfg_name!("search_filter"),
                 &*configs::LDAP_SEARCH_FILTER,
                 "objectClass=*",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "search_attribute",
+                cfg_name!("search_attribute"),
                 &*configs::LDAP_SEARCH_ATTRIBUTE,
                 "uid",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "search_bind_dn",
+                cfg_name!("search_bind_dn"),
                 &*configs::LDAP_SEARCH_BIND_DN,
                 "",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "search_bind_passwd",
+                cfg_name!("search_bind_passwd"),
                 &*configs::LDAP_SEARCH_BIND_PASSWD,
                 "",
                 ConfigurationFlags::SENSITIVE | ConfigurationFlags::HIDDEN,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "search_dn_attribute",
+                cfg_name!("search_dn_attribute"),
                 &*configs::LDAP_SEARCH_DN_ATTRIBUTE,
                 "entryDN",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "groups_search_base",
+                cfg_name!("groups_search_base"),
                 &*configs::LDAP_GROUPS_SEARCH_BASE,
                 "",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "groups_filter",
+                cfg_name!("groups_filter"),
                 &*configs::LDAP_GROUPS_FILTER,
                 "objectClass=groupOfNames",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "groups_member_attribute",
+                cfg_name!("groups_member_attribute"),
                 &*configs::LDAP_GROUPS_MEMBER_ATTRIBUTE,
                 "member",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "groups_name_attribute",
+                cfg_name!("groups_name_attribute"),
                 &*configs::LDAP_GROUPS_NAME_ATTRIBUTE,
                 "cn",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "groups_rules_attribute",
+                cfg_name!("groups_rules_attribute"),
                 &*configs::LDAP_GROUPS_RULES_ATTRIBUTE,
                 "valkeyACL",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "group_acl_user_map",
+                cfg_name!("group_acl_user_map"),
                 &*configs::LDAP_GROUP_TO_ACL_USER_MAP,
                 "",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "group_acl_rules_map",
+                cfg_name!("group_acl_rules_map"),
                 &*configs::LDAP_GROUP_TO_ACL_RULES_MAP,
                 "",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "default_acl_rules",
+                cfg_name!("default_acl_rules"),
                 &*configs::LDAP_DEFAULT_ACL_RULES,
                 "on resetpass",
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
             [
-                "exempted_users_regex",
+                cfg_name!("exempted_users_regex"),
                 &*configs::LDAP_EXEMPTED_USERS_REGEX,
                 "",
                 ConfigurationFlags::DEFAULT,
@@ -287,28 +313,28 @@ valkey_module! {
         ],
         bool: [
             [
-                "use_starttls",
+                cfg_name!("use_starttls"),
                 &*configs::LDAP_USE_STARTTLS,
                 false,
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_connection_setting_change))
             ],
             [
-                "tls_skip_verify",
+                cfg_name!("tls_skip_verify"),
                 &*configs::LDAP_TLS_SKIP_VERIFY,
                 false,
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_connection_setting_change))
             ],
             [
-                "acl_fallback_enabled",
+                cfg_name!("acl_fallback_enabled"),
                 &*configs::LDAP_ACL_FALLBACK_ENABLED,
                 false,
                 ConfigurationFlags::DEFAULT,
                 None
             ],
             [
-                "return_auth_errors",
+                cfg_name!("return_auth_errors"),
                 &*configs::LDAP_RETURN_AUTH_ERRORS,
                 false,
                 ConfigurationFlags::DEFAULT,
@@ -317,14 +343,14 @@ valkey_module! {
         ],
         enum: [
             [
-                "auth_mode",
+                cfg_name!("auth_mode"),
                 &*configs::LDAP_AUTH_MODE,
                 configs::LdapAuthMode::Bind,
                 ConfigurationFlags::DEFAULT,
                 None
             ],
             [
-                "search_scope",
+                cfg_name!("search_scope"),
                 &*configs::LDAP_SEARCH_SCOPE,
                 configs::LdapSearchScope::SubTree,
                 ConfigurationFlags::DEFAULT,
