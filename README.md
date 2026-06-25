@@ -145,5 +145,5 @@ pip install -r test/integration/requirements.txt
 After setting up the virtual environment, you can run the test using the following command:
 
 ```bash
-./script/run_integration_tests.sh
+./scripts/run_integration_tests.sh
 ```
