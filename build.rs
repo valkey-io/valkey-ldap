@@ -22,7 +22,14 @@ fn copy_file_to_build_dir(from: &str) {
 
 fn main() {
     let profile = std::env::var("PROFILE").unwrap();
-    if &profile == "debug" {
+    // The debug-only test fixtures (TLS certs + sample valkey.conf) exist purely
+    // for this crate's own standalone integration tests. When the crate is built
+    // with the `embed` feature it is linked into a host module and those fixtures
+    // are never used; skip them. (generate_test_certificates.sh also assumes the
+    // crate lives in a directory literally named `valkey-ldap`, which is not the
+    // case when embedded as a submodule, so running it here would hang.)
+    let embedded = std::env::var_os("CARGO_FEATURE_EMBED").is_some();
+    if &profile == "debug" && !embedded {
         Command::new("bash")
             .arg("scripts/generate_test_certificates.sh")
             .status()
