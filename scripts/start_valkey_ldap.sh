@@ -13,15 +13,18 @@ fi
 
 cargo build
 
-DOCKER_COMPOSE_RUNNING=`docker compose ls --filter name=valkey-ldap -q && true`
+DOCKER_COMPOSE_RUNNING="$(docker compose ls --filter name=valkey-ldap -q && true)"
+DOCKER_COMPOSE_SERVICE="valkey-${VALKEY_VERSION}"
+DOCKER_COMPOSE_CONFIG_FILE="./scripts/docker/docker-compose.yaml"
+DOCKER_COMPOSE_RUNNING_CONTAINERS="$(docker compose -f "${DOCKER_COMPOSE_CONFIG_FILE}" ps --status=running | grep "${DOCKER_COMPOSE_SERVICE}" | wc -l)"
 
-if [ ! -z $DOCKER_COMPOSE_RUNNING ]; then
+if [ ! -z "${DOCKER_COMPOSE_RUNNING}" ] &&  [ "${DOCKER_COMPOSE_RUNNING_CONTAINERS}" -eq 3 ]; then
     echo "The LDAP and Valkey servers are already running"
 else
     pushd scripts/docker > /dev/null
 
-    docker compose --profile valkey-${VALKEY_VERSION} up -d --wait
-    docker compose --profile valkey-${VALKEY_VERSION} logs -f > /tmp/valkey-ldap.log 2>&1 &
+    docker compose --profile "${DOCKER_COMPOSE_SERVICE}" up -d --wait
+    docker compose --profile "${DOCKER_COMPOSE_SERVICE}" logs -f > /tmp/valkey-ldap.log 2>&1 &
 
     popd > /dev/null
 fi
