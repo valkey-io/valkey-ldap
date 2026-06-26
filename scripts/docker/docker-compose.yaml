@@ -1,6 +1,9 @@
 name: valkey-ldap
 services:
   ldap:
+    build:
+      dockerfile: Dockerfile-ldap
+      context: ./
     image: valkey-ldap-openldap
     profiles:
       ["valkey-7.2", "valkey-8.0", "valkey-8.1", "valkey-9.0", "valkey-9.1"]
@@ -81,7 +84,7 @@ services:
     image: valkey/valkey:9.0
     working_dir: /valkey-ldap
     command: valkey-server valkey.conf
-    profiles: ["valkey-8.1"]
+    profiles: ["valkey-9.0"]
     container_name: valkey
     ports:
       - 6379:6379
@@ -93,7 +96,7 @@ services:
     image: valkey/valkey:9.1
     working_dir: /valkey-ldap
     command: valkey-server valkey.conf
-    profiles: ["valkey-8.1"]
+    profiles: ["valkey-9.1"]
     container_name: valkey
     ports:
       - 6379:6379
