@@ -7,7 +7,8 @@ mod vkldap;
 
 use log::error;
 use valkey_module::{
-    Context, Status, ValkeyString, configuration::ConfigurationFlags, valkey_module,
+    Context, Status, ValkeyString, configuration::ConfigurationFlags, raw::ModuleOptions,
+    valkey_module,
 };
 
 use auth::ldap_auth_blocking_callback;
@@ -22,6 +23,14 @@ fn initializer(ctx: &Context, _args: &[ValkeyString]) -> Status {
     let res = standard_log_implementation::setup_for_context(ctx);
     if let Err(err) = res {
         ctx.log_warning(format!("failed to setup log: {err}").as_str());
+    }
+
+    if let Ok(version) = ctx.get_server_version() {
+        if version.major >= 9 {
+            // VALKEYMODULE_OPTIONS_HANDLE_ATOMIC_SLOT_MIGRATION = (1 << 5), introduced in Valkey 9,
+            // not yet exposed by the valkey-module crate.
+            ctx.set_module_options(ModuleOptions::from_bits_retain(1 << 5));
+        }
     }
 
     scheduler::start_job_scheduler();
