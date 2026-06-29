@@ -21,6 +21,7 @@ DOCKER_COMPOSE_RUNNING_CONTAINERS="$(docker compose -f "${DOCKER_COMPOSE_CONFIG_
 if [ ! -z "${DOCKER_COMPOSE_RUNNING}" ] &&  [ "${DOCKER_COMPOSE_RUNNING_CONTAINERS}" -eq 3 ]; then
     echo "The LDAP and Valkey servers are already running"
 else
+    ./scripts/docker/create-valkey-dockerfile.sh "${VALKEY_VERSION}"
     pushd scripts/docker > /dev/null
 
     docker compose --profile "${DOCKER_COMPOSE_SERVICE}" up -d --wait

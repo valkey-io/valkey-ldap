@@ -45,7 +45,10 @@ services:
 
   valkey-7.2:
     hostname: valkey
-    image: valkey/valkey:7.2
+    build:
+      dockerfile: Dockerfile-valkey-ldap-7.2
+      context: ./
+    image: valkey-ldap-7.2
     working_dir: /valkey-ldap
     command: valkey-server valkey.conf
     profiles: ["valkey-7.2"]
@@ -57,7 +60,10 @@ services:
 
   valkey-8.0:
     hostname: valkey
-    image: valkey/valkey:8.0
+    build:
+      dockerfile: Dockerfile-valkey-ldap-8.0
+      context: ./
+    image: valkey-ldap-8.0
     working_dir: /valkey-ldap
     command: valkey-server valkey.conf
     profiles: ["valkey-8.0"]
@@ -69,7 +75,10 @@ services:
 
   valkey-8.1:
     hostname: valkey
-    image: valkey/valkey:8.1
+    build:
+      dockerfile: Dockerfile-valkey-ldap-8.1
+      context: ./
+    image: valkey-ldap-8.1
     working_dir: /valkey-ldap
     command: valkey-server valkey.conf
     profiles: ["valkey-8.1"]
@@ -81,7 +90,10 @@ services:
 
   valkey-9.0:
     hostname: valkey
-    image: valkey/valkey:9.0
+    build:
+      dockerfile: Dockerfile-valkey-ldap-9.0
+      context: ./
+    image: valkey-ldap-9.0
     working_dir: /valkey-ldap
     command: valkey-server valkey.conf
     profiles: ["valkey-9.0"]
@@ -93,7 +105,10 @@ services:
 
   valkey-9.1:
     hostname: valkey
-    image: valkey/valkey:9.1
+    build:
+      dockerfile: Dockerfile-valkey-ldap-9.1
+      context: ./
+    image: valkey-ldap-9.1
     working_dir: /valkey-ldap
     command: valkey-server valkey.conf
     profiles: ["valkey-9.1"]
