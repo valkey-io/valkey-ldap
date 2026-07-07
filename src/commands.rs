@@ -50,3 +50,21 @@ fn add_ldap_status_section(ctx: &InfoContext, _for_crash_report: bool) -> Valkey
 
     Ok(())
 }
+
+/// C-callable entry point that runs this crate's collected INFO section
+/// handlers against a host-provided info context.
+///
+/// Redis permits only a single module info callback. When this crate is
+/// embedded into a host C module, the host owns that callback so it can also
+/// report its own metrics; the dispatcher registered by the generated
+/// `RedisModule_OnLoad` (renamed to `LDAP_OnLoad`) is therefore overwritten.
+/// The host invokes this shim from its own callback so the LDAP INFO sections
+/// are still emitted.
+#[cfg(feature = "embed")]
+#[unsafe(no_mangle)]
+pub extern "C" fn LDAP_AddInfo(
+    ctx: *mut valkey_module::raw::RedisModuleInfoCtx,
+    for_crash_report: std::os::raw::c_int,
+) {
+    valkey_module::basic_info_command_handler(&InfoContext::new(ctx), for_crash_report == 1);
+}
