@@ -1,8 +1,8 @@
-# ValkeyLDAP - Valkey LDAP authentication module  ![CI](https://github.com/valkey-io/valkey-ldap/actions/workflows/ci.yml/badge.svg) [![Copr Build Status](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/package/valkey-ldap-nightly/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/package/valkey-ldap-nightly/)
+# ValkeyLDAP - Valkey LDAP authentication module  ![CI](https://github.com/valkey-io/valkey-ldap/actions/workflows/ci.yml/badge.svg)
 
 The `valkey-ldap` module is a Rust based Valkey module that adds the support for handling user authentication against LDAP based identity providers.
 
-The module works by registering and authentication handler that intercepts the valkey `AUTH` command, which validates the the username and password, specified in the `AUTH` command, using an LDAP server. Therefore the user must already exist in Valkey before LDAP can be used for authentication.
+The module works by registering an authentication handler that intercepts the valkey `AUTH` command, which validates the username and password, specified in the `AUTH` command, using an LDAP server. Therefore the user must already exist in Valkey before LDAP can be used for authentication.
 
 ## LDAP Authentication Modes
 
@@ -30,14 +30,14 @@ This mode allows for significantly more flexibility in where the user objects ar
 
 As mentioned before, this module requires that user accounts must exist in Valkey in order to authenticate LDAP users. This restriction is necessary because the ACL rules for each LDAP user are stored in the Valkey user account.
 
-For a user `bob` to be successfully authenticated by the LDAP module it must exist in the Valkey ALC database with the same username `bob`.
+For a user `bob` to be successfully authenticated by the LDAP module it must exist in the Valkey ACL database with the same username `bob`.
 
-We can create the Valkey user `bob` without a password, to prevent someone from trying to log in using `bob` account using the password-based authentication method.
+We can create the Valkey user `bob` without a password, to prevent someone from trying to log in using the `bob` account using the password-based authentication method.
 
 To create a user without a password we need to set the `resetpass` rule in the ACL rules list. Example:
 
 ```
-ACL SET USER bob on resetpass +@hash
+ACL SETUSER bob on resetpass +@hash
 ```
 
 After creating the above user `bob` in Valkey, it will only be possible to authenticate user `bob` with a successful authentication from the LDAP module.
@@ -56,7 +56,7 @@ After creating the above user `bob` in Valkey, it will only be possible to authe
 
 | Config Name | Type | Default | Description |
 | ------------|------|---------|-------------|
-| `ldap.use_starttls` | boolean | `no` | Whether upgrade to a TLS encrypted connection upon connection to a non-ssl LDAP instance. This uses the StartTLS operation per RFC 4513. |
+| `ldap.use_starttls` | boolean | `no` | Whether to upgrade to a TLS encrypted connection upon connection to a non-ssl LDAP instance. This uses the StartTLS operation per RFC 4513. |
 | `ldap.tls_ca_cert_path` | string | `""` | The filesystem path of the CA certificate for validating the server certificate in a TLS connection. |
 | `ldap.tls_cert_path` | string | `""` | The filesystem path of the client certificate to be used in a TLS connection to the LDAP server. |
 | `ldap.tls_key_path` | string | `""` | The filesystem path of the client certificate key to be used in a TLS connection to the LDAP server. |
@@ -86,12 +86,14 @@ After creating the above user `bob` in Valkey, it will only be possible to authe
 | ------------|------|---------|-------------|
 | `ldap.connection_pool_size` | number | `2` | The number of connections available in each LDAP server's connection pool. |
 | `ldap.failure_detector_interval` | number | `1` | The number of seconds between each iteration of the failure detector. |
-| `ldap.timeout_connection` | number | `10` | The number of seconds for to wait when connection to an LDAP server before timing out. |
-| `ldap.timeout_ldap_operation` | number | `10` | The number of seconds for to wait for an LDAP operation before timing out. |
+| `ldap.timeout_connection` | number | `10` | The number of seconds to wait when connecting to an LDAP server before timing out. |
+| `ldap.timeout_ldap_operation` | number | `10` | The number of seconds to wait for an LDAP operation before timing out. |
 
 ## Installation
 
-We currently build RPMs for several distributions in the [valkey-ldap Copr project](https://copr.fedorainfracloud.org/coprs/rjd15372/valkey-ldap/).
+RPM and DEB packages are built for several Linux distributions (Fedora, RHEL-compatible distributions, Amazon Linux, Debian, and Ubuntu) on both `x86_64` and `aarch64` by the [Build Packages](https://github.com/valkey-io/valkey-ldap/actions/workflows/packages.yml) GitHub workflow. Packages are built nightly from the `main` branch and for every release tag, and can be downloaded from the artifacts of the corresponding workflow run.
+
+Alternatively, the module can be built from source by following the [Build Instructions](#build-instructions) below. The resulting shared library is located at `target/debug/libvalkey_ldap.so` (or `target/release/libvalkey_ldap.so` when built with `cargo build --release`).
 
 ## Development
 
