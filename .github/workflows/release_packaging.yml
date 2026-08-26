@@ -20,43 +20,6 @@ jobs:
           echo "value=${TAG}" >> "$GITHUB_OUTPUT"
           echo "Release version: ${TAG}"
 
-  Create_RPM_Package:
-    name: Create RPM (Copr)
-    runs-on: ubuntu-latest
-    container:
-      image: fedora:44
-    steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
-
-        - name: Install dependencies
-          shell: bash
-          env:
-            COPR_LOGIN: ${{ secrets.COPR_LOGIN }}
-            COPR_USERNAME: ${{ secrets.COPR_USERNAME }}
-            COPR_TOKEN: ${{ secrets.COPR_TOKEN }}
-          run: |
-            yum install -y copr-cli cargo rpmbuild
-            cat <<EOF > copr.config
-            [copr-cli]
-            login = ${COPR_LOGIN}
-            username = ${COPR_USERNAME}
-            token = ${COPR_TOKEN}
-            copr_url = https://copr.fedorainfracloud.org
-            EOF
-
-        - name: Vendoring dependencies
-          run: |
-            cargo vendor
-
-        - name: Build SRPM
-          run: |
-            ./packaging/build_srpm.sh
-
-        - name: Trigger and wait for Copr Build
-          run : |
-            SRPM=`ls valkey-ldap*.rpm`
-            copr-cli --config copr.config build valkey-ldap $SRPM
 
   Container_Packages:
     name: Container-based packages

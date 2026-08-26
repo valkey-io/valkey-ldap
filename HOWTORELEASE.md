@@ -23,7 +23,7 @@ These are the steps to make a release candidate for version `X.X.0`:
 8. Create a branch with name `X.X` and switch to that branch.
 8. Create an annotated tag for the above commit: `git tag -s -a X.X.0-rc1 -m"version X.X.0-rc1"`.
 9. Push commit and tag to github repo: `git push <remote> X.X --tags`
-   - This will trigger a GitHub action that triggers the RPMs build in Copr.
+   - This will trigger a GitHub action that builds the RPM and DEB packages.
 10. Switch back to the main branch.
 11. Update version string in `Cargo.toml` from `version = "X.X.0-rc1"` to `version = "Y.Y.0-dev"` where `Y.Y.0 > X.X.0`.
 12. Update version hex number in the unit test of `src/versions.rs`.
@@ -53,8 +53,8 @@ Assuming that version `X.X.0-rc1` has been cut of the main branch. To create the
 5. Create a commit with title `Bump to X.X.0` containing the modifications made in the previous steps.
 6. Create an annotated tag for the above commit: `git tag -s -a X.X.0 -m"version X.X.0"`.
 7. Push commit and tag to github repo: `git push <remote> X.X --tags`
-   - This will trigger a GitHub action that will create a draft release for version `X.X.0` and trigger the RPMs build in Copr.
+   - This will trigger a GitHub action that will create a draft release for version `X.X.0` and build the RPM and DEB packages.
 
 ## Steps for doing patch releases
 
-Same has the steps for releasing the GA version by increasing the patch version number of the version string.
+Same as the steps for releasing the GA version by increasing the patch version number of the version string.
