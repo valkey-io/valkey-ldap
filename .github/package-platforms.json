@@ -1,18 +1,6 @@
 {
   "rpm": [
     {
-      "platform_id": "fedora-41",
-      "family": "fedora",
-      "image": "fedora:41",
-      "arch": ["x86_64", "aarch64"]
-    },
-    {
-      "platform_id": "fedora-42",
-      "family": "fedora",
-      "image": "fedora:42",
-      "arch": ["x86_64", "aarch64"]
-    },
-    {
       "platform_id": "fedora-43",
       "family": "fedora",
       "image": "fedora:43",
