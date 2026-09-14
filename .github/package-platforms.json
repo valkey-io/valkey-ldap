@@ -25,6 +25,12 @@
       "arch": ["x86_64", "aarch64"]
     },
     {
+      "platform_id": "fedora-45",
+      "family": "fedora",
+      "image": "fedora:45",
+      "arch": ["x86_64", "aarch64"]
+    },
+    {
       "platform_id": "oraclelinux-8",
       "family": "rhel",
       "image": "oraclelinux:8",
