@@ -52,6 +52,7 @@ After creating the above user `bob` in Valkey, it will only be possible to authe
 | `ldap.auth_mode` | Enum(`bind`, `search+bind`) | `bind` | The authentication method. Check the [Authentication Modes](#ldap-authentication-modes) section for more information about the differences. |
 | `ldap.servers` | string | `""` | Space-separated list of LDAP URLs of the form `ldap[s]://<domain>:<port>`. |
 | `ldap.return_auth_errors` | boolean | `no` | Whether to return the LDAP authentication error on `AUTH` failures. If enabled, will end the auth chain if using multiple authentication modules |
+| `ldap.exclude_users` | string | `""` | Comma separated list of user name patterns (`*` and `?` supported) that are never authenticated against LDAP. Matching users are left to the next authentication method in the chain, normally the local ACL password. Useful for service accounts that only exist in the ACL, which would otherwise cause an LDAP search and an authentication failure log entry on every `AUTH`. |
 
 ### TLS Options
 

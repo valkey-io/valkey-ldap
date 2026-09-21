@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New config variable `exclude_users` holding a comma separated list of user
+  name patterns (`*` and `?` supported) that are never authenticated against
+  LDAP. Accounts that only exist in the Valkey ACL, like health checks or
+  metrics exporters, no longer cause an LDAP search and an authentication
+  failure log entry on every `AUTH`. (Issue #67)
+
 ## [1.1.0] - 2026-05-21
 
 ### Added

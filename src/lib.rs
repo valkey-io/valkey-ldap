@@ -195,6 +195,13 @@ valkey_module! {
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
             ],
+            [
+                "exclude_users",
+                &*configs::LDAP_EXCLUDE_USERS,
+                "",
+                ConfigurationFlags::DEFAULT,
+                None
+            ],
         ],
         bool: [
             [
