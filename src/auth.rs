@@ -53,9 +53,18 @@ pub fn ldap_auth_blocking_callback(
 
     debug!("starting authentication for user={username}");
 
+    let user_str = username.to_string();
+
+    // Users listed in ldap.exclude_users exist only in the ACL: leave the AUTH
+    // unhandled so that Valkey verifies the local password, without an LDAP
+    // round trip and without an authentication failure in the log.
+    if configs::is_user_excluded(ctx, &user_str) {
+        debug!("user={user_str} is excluded from LDAP authentication");
+        return Ok(AUTH_NOT_HANDLED);
+    }
+
     let use_bind_mode = configs::is_bind_mode(ctx);
 
-    let user_str = username.to_string();
     let pass_str = password.to_string();
 
     let blocked_client = ctx.block_client_on_auth(auth_reply_callback, Some(free_callback));

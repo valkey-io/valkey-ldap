@@ -107,6 +107,8 @@ lazy_static! {
     pub static ref LDAP_TIMEOUT_CONNECTION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
     pub static ref LDAP_TIMEOUT_LDAP_OPERATION: ValkeyGILGuard<i64> = ValkeyGILGuard::new(10);
     pub static ref LDAP_RETURN_AUTH_ERRORS: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
+    pub static ref LDAP_EXCLUDE_USERS: ValkeyGILGuard<ValkeyString> =
+        ValkeyGILGuard::new(ValkeyString::create(None, ""));
 }
 
 pub fn refresh_ldap_settings_cache<T: ValkeyLockIndicator>(ctx: &T) {
@@ -345,4 +347,96 @@ pub fn get_timeout_ldap_operation<T: ValkeyLockIndicator>(ctx: &T) -> Duration {
 pub fn get_return_auth_errors<T: ValkeyLockIndicator>(ctx: &T) -> bool {
     let return_errors = LDAP_RETURN_AUTH_ERRORS.lock(ctx);
     *return_errors
+}
+
+/// Returns true when `username` matches one of the patterns configured in
+/// `ldap.exclude_users`. Those users are never authenticated against LDAP: the
+/// module leaves the AUTH unhandled, so Valkey checks the local ACL password.
+///
+/// This keeps service accounts that only exist in the ACL (health checks,
+/// metrics exporters, provisioning users) from producing an LDAP search and an
+/// authentication failure log entry on every connection.
+pub fn is_user_excluded<T: ValkeyLockIndicator>(ctx: &T, username: &str) -> bool {
+    let patterns = LDAP_EXCLUDE_USERS.lock(ctx);
+    matches_any_pattern(username, patterns.to_string().as_str())
+}
+
+fn matches_any_pattern(username: &str, patterns: &str) -> bool {
+    patterns
+        .split(',')
+        .map(str::trim)
+        .filter(|pattern| !pattern.is_empty())
+        .any(|pattern| glob_match(username, pattern))
+}
+
+/// Minimal glob matching with `*` (any sequence, including empty) and `?` (one
+/// character). Implemented iteratively with backtracking to avoid recursion on
+/// attacker supplied user names.
+fn glob_match(value: &str, pattern: &str) -> bool {
+    let value: Vec<char> = value.chars().collect();
+    let pattern: Vec<char> = pattern.chars().collect();
+
+    let (mut v, mut p) = (0usize, 0usize);
+    let (mut star, mut matched) = (None, 0usize);
+
+    while v < value.len() {
+        if p < pattern.len() && (pattern[p] == '?' || pattern[p] == value[v]) {
+            v += 1;
+            p += 1;
+        } else if p < pattern.len() && pattern[p] == '*' {
+            star = Some(p);
+            matched = v;
+            p += 1;
+        } else if let Some(star_pos) = star {
+            p = star_pos + 1;
+            matched += 1;
+            v = matched;
+        } else {
+            return false;
+        }
+    }
+
+    while p < pattern.len() && pattern[p] == '*' {
+        p += 1;
+    }
+    p == pattern.len()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{glob_match, matches_any_pattern};
+
+    #[test]
+    fn glob_matches_literals_and_wildcards() {
+        assert!(glob_match("healthcheck", "healthcheck"));
+        assert!(!glob_match("healthcheck", "health"));
+        assert!(glob_match("sa_metrics", "sa_*"));
+        assert!(glob_match("sa_", "sa_*"));
+        assert!(!glob_match("metrics_sa", "sa_*"));
+        assert!(glob_match("anything", "*"));
+        assert!(glob_match("user1", "user?"));
+        assert!(!glob_match("user12", "user?"));
+        assert!(glob_match("svc-a-prod", "svc-*-prod"));
+        assert!(!glob_match("svc-a-dev", "svc-*-prod"));
+    }
+
+    #[test]
+    fn empty_pattern_list_excludes_nobody() {
+        assert!(!matches_any_pattern("healthcheck", ""));
+        assert!(!matches_any_pattern("healthcheck", "  , ,"));
+    }
+
+    #[test]
+    fn pattern_list_is_comma_separated_and_trimmed() {
+        let patterns = "healthcheck, prometheus , sa_*";
+        assert!(matches_any_pattern("healthcheck", patterns));
+        assert!(matches_any_pattern("prometheus", patterns));
+        assert!(matches_any_pattern("sa_replica", patterns));
+        assert!(!matches_any_pattern("alice", patterns));
+    }
+
+    #[test]
+    fn matching_is_case_sensitive_like_acl_user_names() {
+        assert!(!matches_any_pattern("Healthcheck", "healthcheck"));
+    }
 }
