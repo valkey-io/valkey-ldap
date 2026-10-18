@@ -34,6 +34,7 @@ mod auth;
 mod commands;
 mod configs;
 mod logging;
+mod rate_limit;
 mod version;
 mod vkldap;
 
@@ -83,6 +84,7 @@ fn initializer(ctx: &Context, _args: &[ValkeyString]) -> Status {
     // Use blocking versions during initialization to avoid async scheduler delays
     configs::refresh_ldap_settings_cache_blocking(ctx);
     configs::refresh_connection_settings_cache_blocking(ctx);
+    configs::refresh_rate_limit_settings(ctx);
 
     let server_list = configs::LDAP_SERVER_LIST.lock(ctx).to_string_lossy();
     if let Err(err) = configs::process_server_list(server_list) {
@@ -164,6 +166,33 @@ valkey_module! {
                 std::i64::MAX,
                 ConfigurationFlags::DEFAULT,
                 Some(Box::new(configs::on_ldap_setting_change))
+            ],
+            [
+                cfg_name!("auth_rate_limit_max_failures"),
+                &*configs::LDAP_AUTH_RATE_LIMIT_MAX_FAILURES,
+                0,
+                0,
+                std::i64::MAX,
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_rate_limit_setting_change))
+            ],
+            [
+                cfg_name!("auth_rate_limit_window"),
+                &*configs::LDAP_AUTH_RATE_LIMIT_WINDOW,
+                60,
+                1,
+                configs::MAX_RATE_LIMIT_DURATION_SECS,
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_rate_limit_setting_change))
+            ],
+            [
+                cfg_name!("auth_rate_limit_block_duration"),
+                &*configs::LDAP_AUTH_RATE_LIMIT_BLOCK_DURATION,
+                300,
+                1,
+                configs::MAX_RATE_LIMIT_DURATION_SECS,
+                ConfigurationFlags::DEFAULT,
+                Some(Box::new(configs::on_rate_limit_setting_change))
             ]
         ],
         string: [

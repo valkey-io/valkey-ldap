@@ -5,6 +5,7 @@ use valkey_module::BlockedClient;
 use valkey_module::{AUTH_HANDLED, AUTH_NOT_HANDLED, Context, Status, ValkeyError, ValkeyString};
 
 use crate::configs;
+use crate::rate_limit;
 use crate::vkldap;
 use crate::vkldap::errors::VkLdapError;
 
@@ -132,29 +133,57 @@ fn handle_credential_rejection(
     }
 }
 
+/// Private data handed from the LDAP worker to the auth reply callback: the
+/// client IP tracked by the rate limiter (if any) and the LDAP result.
+type AuthReplyData = (Option<String>, Result<Vec<String>, VkLdapError>);
+
+/// Returns the client's IP address when auth rate limiting is enabled.
+fn rate_limited_client_ip(ctx: &Context) -> Option<String> {
+    if !rate_limit::is_enabled() {
+        return None;
+    }
+    match ctx.get_client_ip_by_id(ctx.get_client_id()) {
+        Ok(ip) if !ip.is_empty() => Some(ip),
+        Ok(_) => None,
+        Err(e) => {
+            debug!("could not get client IP for auth rate limiting: {e}");
+            None
+        }
+    }
+}
+
 fn auth_reply_callback(
     ctx: &Context,
     username: ValkeyString,
     password: ValkeyString,
-    priv_data: Option<&Result<Vec<String>, VkLdapError>>,
+    priv_data: Option<&AuthReplyData>,
 ) -> Result<c_int, ValkeyError> {
     let result = match priv_data {
-        Some(Ok(ldap_tokens)) => {
+        Some((client_ip, Ok(ldap_tokens))) => {
             // LDAP authentication succeeded
-            apply_ldap_user_acl(ctx, &username, &password, ldap_tokens)
+            let res = apply_ldap_user_acl(ctx, &username, &password, ldap_tokens);
+            if let (Some(ip), Ok(AUTH_HANDLED)) = (client_ip, &res) {
+                rate_limit::record_success(ip);
+            }
+            res
         }
-        Some(Err(err)) => {
+        Some((client_ip, Err(err))) => {
             // LDAP authentication failed
             let uname = username.to_string();
             debug!("failed to authenticate LDAP user {uname}");
             error!("LDAP authentication failure: {err}");
 
-            if err.is_user_not_found() {
-                handle_user_not_found(ctx, &uname)
-            } else if err.is_server_unavailable() {
+            if err.is_server_unavailable() {
                 handle_server_unavailable(ctx, &uname, err)
             } else {
-                handle_credential_rejection(ctx, &uname, err)
+                if let Some(ip) = client_ip {
+                    rate_limit::record_failure(ip);
+                }
+                if err.is_user_not_found() {
+                    handle_user_not_found(ctx, &uname)
+                } else {
+                    handle_credential_rejection(ctx, &uname, err)
+                }
             }
         }
         None => Err(ValkeyError::Str(
@@ -165,7 +194,7 @@ fn auth_reply_callback(
     result
 }
 
-fn free_callback(_: &Context, _: Result<Vec<String>, VkLdapError>) {}
+fn free_callback(_: &Context, _: AuthReplyData) {}
 
 pub fn ldap_auth_blocking_callback(
     ctx: &Context,
@@ -184,6 +213,19 @@ pub fn ldap_auth_blocking_callback(
         return Ok(AUTH_NOT_HANDLED);
     }
 
+    let client_ip = rate_limited_client_ip(ctx);
+    if let Some(ip) = &client_ip {
+        if let Some(remaining) = rate_limit::check(ip) {
+            debug!(
+                "rejecting authentication for user={username} from {ip}: rate limited for another {}s",
+                remaining.as_secs()
+            );
+            return Err(ValkeyError::Str(
+                "Too many failed authentication attempts, try again later",
+            ));
+        }
+    }
+
     debug!("starting authentication for user={username}");
 
     let use_bind_mode = configs::is_bind_mode(ctx);
@@ -192,14 +234,13 @@ pub fn ldap_auth_blocking_callback(
 
     let blocked_client = ctx.block_client_on_auth(auth_reply_callback, Some(free_callback));
 
-    let callback =
-        move |blocked_client: Option<BlockedClient<Result<Vec<String>, VkLdapError>>>, result| {
-            assert!(blocked_client.is_some());
-            let mut blocked_client = blocked_client.unwrap();
-            if let Err(e) = blocked_client.set_blocked_private_data(result) {
-                error!("failed to set the auth callback result: {e}");
-            }
-        };
+    let callback = move |blocked_client: Option<BlockedClient<AuthReplyData>>, result| {
+        assert!(blocked_client.is_some());
+        let mut blocked_client = blocked_client.unwrap();
+        if let Err(e) = blocked_client.set_blocked_private_data((client_ip.clone(), result)) {
+            error!("failed to set the auth callback result: {e}");
+        }
+    };
 
     let res = if use_bind_mode {
         vkldap::vk_ldap_bind_and_group_rules(user_str, pass_str, callback, blocked_client)

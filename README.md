@@ -239,6 +239,46 @@ AUTH bob ldap-password
 ```
 
 
+## Rate Limiting Failed Authentications
+
+To slow down brute-force attacks, the module can block client IP addresses that accumulate too many failed LDAP authentication attempts. The feature is **disabled by default**.
+
+### How It Works
+
+When `ldap.auth_rate_limit_max_failures` is greater than `0`:
+
+1. Every failed LDAP authentication (wrong password or unknown user) is counted against the client's IP address. The counting window starts at the IP's first failure and lasts `ldap.auth_rate_limit_window` seconds.
+2. Once an IP reaches `ldap.auth_rate_limit_max_failures` failures within the window, it is blocked for `ldap.auth_rate_limit_block_duration` seconds.
+3. While blocked, every LDAP authentication attempt from that IP is rejected with `Too many failed authentication attempts, try again later`, even when the password is correct, and the LDAP server is not contacted.
+4. A successful LDAP authentication clears the IP's failure count.
+
+Notes:
+- Failures caused by LDAP server unavailability are not counted.
+- Exempted users (`ldap.exempted_users_regex`) are not subject to the rate limit since they don't authenticate through LDAP.
+- Clients connected through a Unix socket have no IP address and are not rate limited.
+- Changing any of the rate limit settings clears all tracked failures and blocks.
+- State is kept in memory per Valkey node and is reset when the module is reloaded.
+
+### Configuration
+
+```bash
+# Block an IP for 5 minutes after 5 failures within 1 minute
+CONFIG SET ldap.auth_rate_limit_max_failures 5
+CONFIG SET ldap.auth_rate_limit_window 60
+CONFIG SET ldap.auth_rate_limit_block_duration 300
+
+# Disable rate limiting (default)
+CONFIG SET ldap.auth_rate_limit_max_failures 0
+```
+
+The number of currently blocked IPs is reported by `INFO ldap`:
+
+```
+# ldap_auth_rate_limit
+ldap_auth_rate_limit_enabled:yes
+ldap_auth_rate_limit_blocked_ips:1
+```
+
 ## Module Configuration
 
 ### General Options
@@ -294,6 +334,9 @@ AUTH bob ldap-password
 | `ldap.default_acl_rules` | string | `"on resetpass"` | Default ACL rule tokens always applied alongside LDAP-provided tokens. |
 | `ldap.exempted_users_regex` | string | `""` | Regex pattern to exempt certain users from LDAP authentication. Users matching this pattern will bypass LDAP and use local Valkey authentication. Useful for service accounts, monitoring users, and inter-node communication. Examples: `^(default|exporter|replication)$` or `^(admin\|metrics-.*)$`. |
 | `ldap.acl_fallback_enabled` | bool | `no` | Enable ACL fallback when LDAP server is unavailable. When enabled and LDAP authentication succeeds, the user's password is saved in the ACL. If the LDAP server becomes unavailable later, the user can still authenticate using the cached password in the ACL. Note: This only applies to server unavailability; credential rejections will never fall back to ACL. |
+| `ldap.auth_rate_limit_max_failures` | number | `0` | Number of failed LDAP authentications from a single client IP, within `ldap.auth_rate_limit_window`, after which the IP is blocked. `0` disables rate limiting. See [Rate Limiting Failed Authentications](#rate-limiting-failed-authentications). |
+| `ldap.auth_rate_limit_window` | number | `60` | Length, in seconds, of the window in which failed authentications are counted. |
+| `ldap.auth_rate_limit_block_duration` | number | `300` | Number of seconds a client IP stays blocked after reaching `ldap.auth_rate_limit_max_failures`. |
 
 ### Quick Setup: Dynamic ACL Rule Sync
 
