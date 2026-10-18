@@ -78,6 +78,18 @@ impl VkLdapError {
         }
     }
 
+    /// Returns true if the error means the client presented wrong credentials
+    /// or an unknown username, as opposed to a server-side, configuration or
+    /// connectivity problem.
+    pub fn is_credential_failure(&self) -> bool {
+        self.is_user_not_found()
+            || matches!(
+                self,
+                VkLdapError::LdapBindError(ldap3::LdapError::LdapResult { result })
+                    if result.rc == 49
+            )
+    }
+
     /// Returns true if the error indicates the LDAP server is unavailable
     /// This is used to distinguish server unavailability from authentication failures
     pub fn is_server_unavailable(&self) -> bool {
@@ -224,4 +236,48 @@ macro_rules! handle_ldap_error {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ldap3::{LdapError, LdapResult};
+
+    fn bind_error(rc: u32, text: &str) -> VkLdapError {
+        VkLdapError::LdapBindError(LdapError::LdapResult {
+            result: LdapResult {
+                rc,
+                matched: String::new(),
+                text: text.to_string(),
+                refs: vec![],
+                ctrls: vec![],
+            },
+        })
+    }
+
+    #[test]
+    fn credential_failures() {
+        assert!(bind_error(49, "invalid credentials").is_credential_failure());
+        assert!(bind_error(32, "no such object").is_credential_failure());
+        assert!(VkLdapError::NoLdapEntryFound("uid=x".to_string()).is_credential_failure());
+    }
+
+    #[test]
+    fn non_credential_failures() {
+        // unwillingToPerform, admin bind and search errors are not the
+        // client's fault
+        assert!(!bind_error(53, "unwilling to perform").is_credential_failure());
+        let admin = VkLdapError::LdapAdminBindError(LdapError::LdapResult {
+            result: LdapResult {
+                rc: 49,
+                matched: String::new(),
+                text: String::new(),
+                refs: vec![],
+                ctrls: vec![],
+            },
+        });
+        assert!(!admin.is_credential_failure());
+        assert!(!VkLdapError::MultipleEntryFound("uid=x".to_string()).is_credential_failure());
+        assert!(!VkLdapError::NoHealthyServerAvailable(vec![]).is_credential_failure());
+    }
 }

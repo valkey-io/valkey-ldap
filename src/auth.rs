@@ -175,13 +175,16 @@ fn auth_reply_callback(
             debug!("failed to authenticate LDAP user {uname}");
             error!("LDAP authentication failure: {err}");
 
-            // Credential failures stay counted by the rate limiter
-            if err.is_user_not_found() {
-                handle_user_not_found(ctx, &uname)
-            } else if err.is_server_unavailable() {
+            // Only credential failures stay counted by the rate limiter
+            if !err.is_credential_failure() {
                 if let Some(attempt) = attempt {
                     rate_limit::refund_attempt(attempt);
                 }
+            }
+
+            if err.is_user_not_found() {
+                handle_user_not_found(ctx, &uname)
+            } else if err.is_server_unavailable() {
                 handle_server_unavailable(ctx, &uname, err)
             } else {
                 handle_credential_rejection(ctx, &uname, err)

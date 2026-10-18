@@ -253,7 +253,7 @@ When `ldap.auth_rate_limit_max_failures` is greater than `0`:
 4. Successful authentications are not counted, but they don't reset failures already counted for the IP; those expire with the window.
 
 Notes:
-- Failures caused by LDAP server unavailability are not counted.
+- Only wrong-credential and unknown-user failures are counted. Errors such as LDAP server unavailability, admin-bind or search failures, or misconfiguration are not.
 - Each attempt is counted when it is admitted and refunded once it turns out not to be a credential failure, so concurrent attempts can't get past the limit.
 - Exempted users (`ldap.exempted_users_regex`) are not subject to the rate limit since they don't authenticate through LDAP.
 - Clients connected through a Unix socket have no IP address and are not rate limited.
