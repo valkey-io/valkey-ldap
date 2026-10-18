@@ -4,7 +4,14 @@
 //! first failure. When `max_failures` failures accumulate inside that window,
 //! the IP is blocked for `block_duration`, during which any LDAP
 //! authentication attempt from it is rejected without contacting the LDAP
-//! server. A successful authentication clears the IP's failure count.
+//! server.
+//!
+//! To keep concurrent attempts from slipping past the limit, an attempt is
+//! counted as a failure when it is admitted (atomically with the block
+//! check). Once its outcome is known, an attempt that did not fail on
+//! credentials (successful login, LDAP server unavailable, submission error)
+//! is refunded. A refund only removes that attempt's own count, so a
+//! successful login doesn't clear failures from other attempts.
 //!
 //! The limiter is disabled when `max_failures` is 0 (the default).
 
@@ -81,7 +88,7 @@ impl AuthRateLimiter {
     }
 
     /// Returns the remaining block time if `ip` is currently blocked.
-    pub fn check(&mut self, ip: &str, now: Instant) -> Option<Duration> {
+    fn check(&mut self, ip: &str, now: Instant) -> Option<Duration> {
         if !self.settings.is_enabled() {
             return None;
         }
@@ -93,13 +100,38 @@ impl AuthRateLimiter {
         entry.blocked_until.map(|until| until - now)
     }
 
-    /// Records a failed authentication. Returns true if this failure caused
-    /// the IP to become blocked.
-    pub fn record_failure(&mut self, ip: &str, now: Instant) -> bool {
+    /// Atomically rejects `ip` if it is blocked, or else counts this attempt
+    /// as a failure. Returns `Ok(None)` when the limiter is disabled,
+    /// `Ok(Some(token))` for an admitted attempt (`token` is passed to
+    /// `refund_attempt`), or `Err(remaining)` when the IP is blocked.
+    pub fn begin_attempt(&mut self, ip: &str, now: Instant) -> Result<Option<Instant>, Duration> {
         if !self.settings.is_enabled() {
-            return false;
+            return Ok(None);
         }
+        if let Some(remaining) = self.check(ip, now) {
+            return Err(remaining);
+        }
+        Ok(Some(self.record_failure(ip, now)))
+    }
 
+    /// Undoes the count of an admitted attempt that turned out not to be a
+    /// credential failure. `token` is the value returned by `begin_attempt`;
+    /// attempts admitted in an earlier window are not refunded.
+    pub fn refund_attempt(&mut self, ip: &str, token: Instant) {
+        let max_failures = self.settings.max_failures;
+        if let Some(entry) = self.entries.get_mut(ip) {
+            if entry.window_start != token {
+                return;
+            }
+            entry.failures = entry.failures.saturating_sub(1);
+            if entry.failures < max_failures {
+                entry.blocked_until = None;
+            }
+        }
+    }
+
+    // Counts a failure for `ip` and returns the start of its current window.
+    fn record_failure(&mut self, ip: &str, now: Instant) -> Instant {
         let settings = self.settings;
         let entry = self.entries.entry(ip.to_string()).or_insert(IpEntry {
             failures: 0,
@@ -115,23 +147,20 @@ impl AuthRateLimiter {
             };
         }
 
-        if entry.blocked_until.is_some() {
-            return false;
-        }
-
         entry.failures += 1;
-        let blocked = entry.failures >= settings.max_failures;
-        if blocked {
+        if entry.failures >= settings.max_failures {
             entry.blocked_until = Some(now + settings.block_duration);
         }
+        let window_start = entry.window_start;
 
         self.maybe_prune(now);
-        blocked
+        window_start
     }
 
-    /// Records a successful authentication, clearing the IP's failure count.
-    pub fn record_success(&mut self, ip: &str) {
-        self.entries.remove(ip);
+    fn is_blocked(&self, ip: &str, now: Instant) -> bool {
+        self.entries
+            .get(ip)
+            .is_some_and(|e| e.blocked_until.is_some_and(|until| now < until))
     }
 
     /// Number of IPs that are currently blocked.
@@ -183,19 +212,37 @@ pub fn is_enabled() -> bool {
     with_limiter(|l| l.settings.is_enabled())
 }
 
-pub fn check(ip: &str) -> Option<Duration> {
-    with_limiter(|l| l.check(ip, Instant::now()))
+/// An admitted authentication attempt, counted as a failure until refunded.
+#[derive(Clone, Debug)]
+pub struct Attempt {
+    ip: String,
+    token: Instant,
 }
 
-pub fn record_failure(ip: &str) {
-    let blocked = with_limiter(|l| l.record_failure(ip, Instant::now()));
-    if blocked {
+/// Admits an authentication attempt from `ip`, or returns the remaining block
+/// time if the IP is blocked. Returns `Ok(None)` when rate limiting is
+/// disabled.
+pub fn begin_attempt(ip: &str) -> Result<Option<Attempt>, Duration> {
+    let (res, blocked_now) = with_limiter(|l| {
+        let now = Instant::now();
+        let res = l.begin_attempt(ip, now);
+        let blocked_now = matches!(res, Ok(Some(_))) && l.is_blocked(ip, now);
+        (res, blocked_now)
+    });
+    if blocked_now {
         warn!("too many failed LDAP authentication attempts from {ip}, blocking it");
     }
+    res.map(|token| {
+        token.map(|token| Attempt {
+            ip: ip.to_string(),
+            token,
+        })
+    })
 }
 
-pub fn record_success(ip: &str) {
-    with_limiter(|l| l.record_success(ip));
+/// Refunds an attempt that did not fail on credentials.
+pub fn refund_attempt(attempt: &Attempt) {
+    with_limiter(|l| l.refund_attempt(&attempt.ip, attempt.token));
 }
 
 pub fn blocked_count() -> usize {
@@ -214,14 +261,17 @@ mod tests {
         }
     }
 
+    fn secs(n: u64) -> Duration {
+        Duration::from_secs(n)
+    }
+
     #[test]
     fn disabled_by_default() {
         let mut l = AuthRateLimiter::new(RateLimitSettings::default());
         let now = Instant::now();
         for _ in 0..100 {
-            assert!(!l.record_failure("1.2.3.4", now));
+            assert_eq!(l.begin_attempt("1.2.3.4", now), Ok(None));
         }
-        assert_eq!(l.check("1.2.3.4", now), None);
         assert!(l.entries.is_empty());
     }
 
@@ -229,64 +279,89 @@ mod tests {
     fn blocks_after_max_failures() {
         let mut l = AuthRateLimiter::new(settings(3, 60, 300));
         let now = Instant::now();
-        assert!(!l.record_failure("1.2.3.4", now));
-        assert!(!l.record_failure("1.2.3.4", now));
-        assert_eq!(l.check("1.2.3.4", now), None);
-        assert!(l.record_failure("1.2.3.4", now));
-        assert_eq!(l.check("1.2.3.4", now), Some(Duration::from_secs(300)));
+        for _ in 0..3 {
+            assert!(matches!(l.begin_attempt("1.2.3.4", now), Ok(Some(_))));
+        }
+        assert_eq!(l.begin_attempt("1.2.3.4", now), Err(secs(300)));
         // Other IPs are unaffected
-        assert_eq!(l.check("5.6.7.8", now), None);
+        assert!(matches!(l.begin_attempt("5.6.7.8", now), Ok(Some(_))));
         assert_eq!(l.blocked_count(now), 1);
+    }
+
+    #[test]
+    fn concurrent_attempts_cannot_exceed_limit() {
+        // Attempts are counted on admission, so in-flight attempts whose
+        // results haven't arrived yet still count towards the limit.
+        let mut l = AuthRateLimiter::new(settings(3, 60, 300));
+        let now = Instant::now();
+        let admitted = (0..10)
+            .filter(|_| l.begin_attempt("ip", now).is_ok())
+            .count();
+        assert_eq!(admitted, 3);
     }
 
     #[test]
     fn block_expires() {
         let mut l = AuthRateLimiter::new(settings(1, 60, 10));
         let now = Instant::now();
-        assert!(l.record_failure("ip", now));
-        assert!(l.check("ip", now + Duration::from_secs(9)).is_some());
-        assert_eq!(l.check("ip", now + Duration::from_secs(10)), None);
-        assert_eq!(l.blocked_count(now + Duration::from_secs(10)), 0);
+        assert!(l.begin_attempt("ip", now).is_ok());
+        assert!(l.begin_attempt("ip", now + secs(9)).is_err());
+        assert!(matches!(l.begin_attempt("ip", now + secs(10)), Ok(Some(_))));
     }
 
     #[test]
     fn failures_outside_window_reset() {
         let mut l = AuthRateLimiter::new(settings(2, 10, 300));
         let now = Instant::now();
-        assert!(!l.record_failure("ip", now));
-        assert!(!l.record_failure("ip", now + Duration::from_secs(10)));
-        assert!(l.record_failure("ip", now + Duration::from_secs(11)));
+        assert!(l.begin_attempt("ip", now).is_ok());
+        assert!(l.begin_attempt("ip", now + secs(10)).is_ok());
+        assert!(l.begin_attempt("ip", now + secs(11)).is_ok());
+        assert!(l.begin_attempt("ip", now + secs(11)).is_err());
     }
 
     #[test]
-    fn success_clears_failures() {
+    fn refund_only_removes_own_attempt() {
+        let mut l = AuthRateLimiter::new(settings(3, 60, 300));
+        let now = Instant::now();
+        assert!(l.begin_attempt("ip", now).is_ok());
+        assert!(l.begin_attempt("ip", now).is_ok());
+        // A successful login is refunded but keeps the other failures
+        let token = l.begin_attempt("ip", now).unwrap().unwrap();
+        l.refund_attempt("ip", token);
+        assert!(l.begin_attempt("ip", now).is_ok());
+        assert!(l.begin_attempt("ip", now).is_err());
+    }
+
+    #[test]
+    fn refund_lifts_block_caused_by_refunded_attempt() {
         let mut l = AuthRateLimiter::new(settings(2, 60, 300));
         let now = Instant::now();
-        assert!(!l.record_failure("ip", now));
-        l.record_success("ip");
-        assert!(!l.record_failure("ip", now));
-        assert!(l.record_failure("ip", now));
+        assert!(l.begin_attempt("ip", now).is_ok());
+        let token = l.begin_attempt("ip", now).unwrap().unwrap();
+        assert_eq!(l.blocked_count(now), 1);
+        l.refund_attempt("ip", token);
+        assert_eq!(l.blocked_count(now), 0);
+        assert!(l.begin_attempt("ip", now).is_ok());
     }
 
     #[test]
-    fn failures_while_blocked_do_not_extend_block() {
-        let mut l = AuthRateLimiter::new(settings(1, 60, 10));
+    fn refund_from_previous_window_is_ignored() {
+        let mut l = AuthRateLimiter::new(settings(2, 10, 300));
         let now = Instant::now();
-        assert!(l.record_failure("ip", now));
-        assert!(!l.record_failure("ip", now + Duration::from_secs(5)));
-        assert_eq!(
-            l.check("ip", now + Duration::from_secs(5)),
-            Some(Duration::from_secs(5))
-        );
+        let token = l.begin_attempt("ip", now).unwrap().unwrap();
+        assert!(l.begin_attempt("ip", now + secs(10)).is_ok());
+        l.refund_attempt("ip", token);
+        assert!(l.begin_attempt("ip", now + secs(10)).is_ok());
+        assert!(l.begin_attempt("ip", now + secs(10)).is_err());
     }
 
     #[test]
     fn configure_clears_state() {
         let mut l = AuthRateLimiter::new(settings(1, 60, 300));
         let now = Instant::now();
-        assert!(l.record_failure("ip", now));
+        assert!(l.begin_attempt("ip", now).is_ok());
         l.configure(settings(5, 60, 300));
-        assert_eq!(l.check("ip", now), None);
+        assert!(matches!(l.begin_attempt("ip", now), Ok(Some(_))));
     }
 
     #[test]
@@ -294,10 +369,10 @@ mod tests {
         let mut l = AuthRateLimiter::new(settings(5, 1, 1));
         let now = Instant::now();
         for i in 0..MIN_PRUNE_THRESHOLD - 1 {
-            l.record_failure(&format!("ip{i}"), now);
+            let _ = l.begin_attempt(&format!("ip{i}"), now);
         }
         assert_eq!(l.entries.len(), MIN_PRUNE_THRESHOLD - 1);
-        l.record_failure("late", now + Duration::from_secs(2));
+        let _ = l.begin_attempt("late", now + secs(2));
         assert_eq!(l.entries.len(), 1);
     }
 }

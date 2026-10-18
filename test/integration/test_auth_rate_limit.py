@@ -78,14 +78,20 @@ class AuthRateLimitTest(LdapTestCase):
         self._auth("user1@123")
         self.assertEqual(self.client.execute_command("ACL", "WHOAMI").decode(), "user1")
 
-    def test_success_resets_failures(self):
+    def test_successes_are_not_counted(self):
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "2")
+
+        for _ in range(5):
+            self._auth("user1@123")
+        self.assertEqual(self.client.execute_command("ACL", "WHOAMI").decode(), "user1")
+
+    def test_success_does_not_reset_failures(self):
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "3")
 
         self._fail_auth(2)
         self._auth("user1@123")
-        self._fail_auth(2)
-        self._auth("user1@123")
-        self.assertEqual(self.client.execute_command("ACL", "WHOAMI").decode(), "user1")
+        self._fail_auth(1)
+        self._assert_rate_limited()
 
     def test_block_expires(self):
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "2")

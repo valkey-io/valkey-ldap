@@ -134,8 +134,11 @@ fn handle_credential_rejection(
 }
 
 /// Private data handed from the LDAP worker to the auth reply callback: the
-/// client IP tracked by the rate limiter (if any) and the LDAP result.
-type AuthReplyData = (Option<String>, Result<Vec<String>, VkLdapError>);
+/// attempt admitted by the rate limiter (if any) and the LDAP result.
+type AuthReplyData = (
+    Option<rate_limit::Attempt>,
+    Result<Vec<String>, VkLdapError>,
+);
 
 /// Returns the client's IP address when auth rate limiting is enabled.
 fn rate_limited_client_ip(ctx: &Context) -> Option<String> {
@@ -159,31 +162,29 @@ fn auth_reply_callback(
     priv_data: Option<&AuthReplyData>,
 ) -> Result<c_int, ValkeyError> {
     let result = match priv_data {
-        Some((client_ip, Ok(ldap_tokens))) => {
-            // LDAP authentication succeeded
-            let res = apply_ldap_user_acl(ctx, &username, &password, ldap_tokens);
-            if let (Some(ip), Ok(AUTH_HANDLED)) = (client_ip, &res) {
-                rate_limit::record_success(ip);
+        Some((attempt, Ok(ldap_tokens))) => {
+            // LDAP authentication succeeded, so the attempt was not a failure
+            if let Some(attempt) = attempt {
+                rate_limit::refund_attempt(attempt);
             }
-            res
+            apply_ldap_user_acl(ctx, &username, &password, ldap_tokens)
         }
-        Some((client_ip, Err(err))) => {
+        Some((attempt, Err(err))) => {
             // LDAP authentication failed
             let uname = username.to_string();
             debug!("failed to authenticate LDAP user {uname}");
             error!("LDAP authentication failure: {err}");
 
-            if err.is_server_unavailable() {
+            // Credential failures stay counted by the rate limiter
+            if err.is_user_not_found() {
+                handle_user_not_found(ctx, &uname)
+            } else if err.is_server_unavailable() {
+                if let Some(attempt) = attempt {
+                    rate_limit::refund_attempt(attempt);
+                }
                 handle_server_unavailable(ctx, &uname, err)
             } else {
-                if let Some(ip) = client_ip {
-                    rate_limit::record_failure(ip);
-                }
-                if err.is_user_not_found() {
-                    handle_user_not_found(ctx, &uname)
-                } else {
-                    handle_credential_rejection(ctx, &uname, err)
-                }
+                handle_credential_rejection(ctx, &uname, err)
             }
         }
         None => Err(ValkeyError::Str(
@@ -213,18 +214,20 @@ pub fn ldap_auth_blocking_callback(
         return Ok(AUTH_NOT_HANDLED);
     }
 
-    let client_ip = rate_limited_client_ip(ctx);
-    if let Some(ip) = &client_ip {
-        if let Some(remaining) = rate_limit::check(ip) {
+    let attempt = match rate_limited_client_ip(ctx).map(|ip| rate_limit::begin_attempt(&ip)) {
+        None => None,
+        Some(Ok(attempt)) => attempt,
+        Some(Err(remaining)) => {
             debug!(
-                "rejecting authentication for user={username} from {ip}: rate limited for another {}s",
+                "rejecting LDAP authentication: client is rate limited for another {}s",
                 remaining.as_secs()
             );
             return Err(ValkeyError::Str(
                 "Too many failed authentication attempts, try again later",
             ));
         }
-    }
+    };
+    let submitted_attempt = attempt.clone();
 
     debug!("starting authentication for user={username}");
 
@@ -237,7 +240,7 @@ pub fn ldap_auth_blocking_callback(
     let callback = move |blocked_client: Option<BlockedClient<AuthReplyData>>, result| {
         assert!(blocked_client.is_some());
         let mut blocked_client = blocked_client.unwrap();
-        if let Err(e) = blocked_client.set_blocked_private_data((client_ip.clone(), result)) {
+        if let Err(e) = blocked_client.set_blocked_private_data((attempt.clone(), result)) {
             error!("failed to set the auth callback result: {e}");
         }
     };
@@ -252,6 +255,9 @@ pub fn ldap_auth_blocking_callback(
         Ok(_) => Ok(AUTH_HANDLED),
         Err(err) => {
             error!("failed to submit ldap bind request: {err}");
+            if let Some(attempt) = &submitted_attempt {
+                rate_limit::refund_attempt(attempt);
+            }
             if configs::get_return_auth_errors(ctx) {
                 Err(ValkeyError::String(err.to_string()))
             } else {

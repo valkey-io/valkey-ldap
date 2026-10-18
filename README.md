@@ -250,10 +250,11 @@ When `ldap.auth_rate_limit_max_failures` is greater than `0`:
 1. Every failed LDAP authentication (wrong password or unknown user) is counted against the client's IP address. The counting window starts at the IP's first failure and lasts `ldap.auth_rate_limit_window` seconds.
 2. Once an IP reaches `ldap.auth_rate_limit_max_failures` failures within the window, it is blocked for `ldap.auth_rate_limit_block_duration` seconds.
 3. While blocked, every LDAP authentication attempt from that IP is rejected with `Too many failed authentication attempts, try again later`, even when the password is correct, and the LDAP server is not contacted.
-4. A successful LDAP authentication clears the IP's failure count.
+4. Successful authentications are not counted, but they don't reset failures already counted for the IP; those expire with the window.
 
 Notes:
 - Failures caused by LDAP server unavailability are not counted.
+- Each attempt is counted when it is admitted and refunded once it turns out not to be a credential failure, so concurrent attempts can't get past the limit.
 - Exempted users (`ldap.exempted_users_regex`) are not subject to the rate limit since they don't authenticate through LDAP.
 - Clients connected through a Unix socket have no IP address and are not rate limited.
 - Changing any of the rate limit settings clears all tracked failures and blocks.
