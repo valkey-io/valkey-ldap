@@ -247,14 +247,14 @@ To slow down brute-force attacks, the module can block client IP addresses that 
 
 When `ldap.auth_rate_limit_max_failures` is greater than `0`:
 
-1. Every failed LDAP authentication (wrong password or unknown user) is counted against the client's IP address. The counting window starts at the IP's first failure and lasts `ldap.auth_rate_limit_window` seconds.
-2. Once an IP reaches `ldap.auth_rate_limit_max_failures` failures within the window, it is blocked for `ldap.auth_rate_limit_block_duration` seconds.
+1. Every failed LDAP authentication (wrong password or unknown user) is counted against the client's IP address. The counting window starts at the IP's first counted attempt and lasts `ldap.auth_rate_limit_window` seconds.
+2. Once an IP reaches `ldap.auth_rate_limit_max_failures` failures within the window, it is blocked for `ldap.auth_rate_limit_block_duration` seconds. When the block ends, the IP's failure count is cleared and a new window starts with its next attempt.
 3. While blocked, every LDAP authentication attempt from that IP is rejected with `Too many failed authentication attempts, try again later`, even when the password is correct, and the LDAP server is not contacted.
-4. Successful authentications are not counted, but they don't reset failures already counted for the IP; those expire with the window.
+4. Successful authentications are not counted, but they don't reset failures already counted for the IP. Those are cleared when the window ends or, if the IP was blocked, when the block ends.
 
 Notes:
 - Only wrong-credential and unknown-user failures are counted. Errors such as LDAP server unavailability, admin-bind or search failures, or misconfiguration are not.
-- Each attempt is counted when it is admitted and refunded once it turns out not to be a credential failure, so concurrent attempts can't get past the limit.
+- Each attempt is counted when it is admitted and refunded once it turns out not to be a credential failure (including when the client disconnects before the result arrives), so concurrent attempts can't get past the limit. If refunds bring an IP's count back to zero, its window is discarded and the next attempt starts a new one.
 - Exempted users (`ldap.exempted_users_regex`) are not subject to the rate limit since they don't authenticate through LDAP.
 - Clients connected through a Unix socket have no IP address and are not rate limited.
 - Changing any of the rate limit settings clears all tracked failures and blocks.

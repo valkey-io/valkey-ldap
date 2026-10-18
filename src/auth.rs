@@ -162,25 +162,15 @@ fn auth_reply_callback(
     priv_data: Option<&AuthReplyData>,
 ) -> Result<c_int, ValkeyError> {
     let result = match priv_data {
-        Some((attempt, Ok(ldap_tokens))) => {
-            // LDAP authentication succeeded, so the attempt was not a failure
-            if let Some(attempt) = attempt {
-                rate_limit::refund_attempt(attempt);
-            }
+        Some((_, Ok(ldap_tokens))) => {
+            // LDAP authentication succeeded
             apply_ldap_user_acl(ctx, &username, &password, ldap_tokens)
         }
-        Some((attempt, Err(err))) => {
+        Some((_, Err(err))) => {
             // LDAP authentication failed
             let uname = username.to_string();
             debug!("failed to authenticate LDAP user {uname}");
             error!("LDAP authentication failure: {err}");
-
-            // Only credential failures stay counted by the rate limiter
-            if !err.is_credential_failure() {
-                if let Some(attempt) = attempt {
-                    rate_limit::refund_attempt(attempt);
-                }
-            }
 
             if err.is_user_not_found() {
                 handle_user_not_found(ctx, &uname)
@@ -198,7 +188,17 @@ fn auth_reply_callback(
     result
 }
 
-fn free_callback(_: &Context, _: AuthReplyData) {}
+/// Called once for every attempt's private data, including when the client
+/// disconnected before the reply callback could run. The rate limiter counted
+/// the attempt when it was admitted, so refund it unless it was a credential
+/// failure.
+fn free_callback(_: &Context, (attempt, result): AuthReplyData) {
+    if let Some(attempt) = attempt {
+        if !matches!(&result, Err(err) if err.is_credential_failure()) {
+            rate_limit::refund_attempt(&attempt);
+        }
+    }
+}
 
 pub fn ldap_auth_blocking_callback(
     ctx: &Context,
@@ -245,6 +245,10 @@ pub fn ldap_auth_blocking_callback(
         let mut blocked_client = blocked_client.unwrap();
         if let Err(e) = blocked_client.set_blocked_private_data((attempt.clone(), result)) {
             error!("failed to set the auth callback result: {e}");
+            // The data never reaches free_callback, so refund here
+            if let Some(attempt) = &attempt {
+                rate_limit::refund_attempt(attempt);
+            }
         }
     };
 

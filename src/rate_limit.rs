@@ -62,11 +62,13 @@ struct IpEntry {
 }
 
 impl IpEntry {
+    fn expires_at(&self, settings: &RateLimitSettings) -> Instant {
+        self.blocked_until
+            .unwrap_or(self.window_start + settings.window)
+    }
+
     fn is_expired(&self, now: Instant, settings: &RateLimitSettings) -> bool {
-        match self.blocked_until {
-            Some(until) => now >= until,
-            None => now.duration_since(self.window_start) >= settings.window,
-        }
+        now >= self.expires_at(settings)
     }
 }
 
@@ -75,6 +77,9 @@ pub struct AuthRateLimiter {
     settings: RateLimitSettings,
     entries: HashMap<String, IpEntry>,
     prune_threshold: usize,
+    // While at MAX_TRACKED_IPS, the earliest time an entry expires, so new
+    // IPs don't trigger a full scan until something can be pruned.
+    next_capacity_prune: Option<Instant>,
 }
 
 impl AuthRateLimiter {
@@ -83,6 +88,7 @@ impl AuthRateLimiter {
             settings,
             entries: HashMap::new(),
             prune_threshold: MIN_PRUNE_THRESHOLD,
+            next_capacity_prune: None,
         }
     }
 
@@ -91,6 +97,7 @@ impl AuthRateLimiter {
         self.settings = settings;
         self.entries.clear();
         self.prune_threshold = MIN_PRUNE_THRESHOLD;
+        self.next_capacity_prune = None;
     }
 
     /// Returns the remaining block time if `ip` is currently blocked.
@@ -129,6 +136,9 @@ impl AuthRateLimiter {
         if self.entries.len() < MAX_TRACKED_IPS || self.entries.contains_key(ip) {
             return true;
         }
+        if self.next_capacity_prune.is_some_and(|t| now < t) {
+            return false;
+        }
         self.prune(now);
         self.entries.len() < MAX_TRACKED_IPS
     }
@@ -143,7 +153,10 @@ impl AuthRateLimiter {
                 return;
             }
             entry.failures = entry.failures.saturating_sub(1);
-            if entry.failures < max_failures {
+            if entry.failures == 0 {
+                // Nothing left to count; the next failure starts a new window
+                self.entries.remove(ip);
+            } else if entry.failures < max_failures {
                 entry.blocked_until = None;
             }
         }
@@ -203,6 +216,11 @@ impl AuthRateLimiter {
         let settings = self.settings;
         self.entries.retain(|_, e| !e.is_expired(now, &settings));
         self.prune_threshold = MIN_PRUNE_THRESHOLD.max(self.entries.len() * 2);
+        self.next_capacity_prune = if self.entries.len() >= MAX_TRACKED_IPS {
+            self.entries.values().map(|e| e.expires_at(&settings)).min()
+        } else {
+            None
+        };
     }
 }
 
@@ -404,12 +422,29 @@ mod tests {
         assert_eq!(l.begin_attempt("new", now), Ok(None));
         assert!(matches!(l.begin_attempt("ip0", now), Ok(Some(_))));
         assert_eq!(l.entries.len(), MAX_TRACKED_IPS);
+        // At capacity, new IPs don't rescan until the earliest entry expires
+        assert_eq!(l.next_capacity_prune, Some(now + secs(60)));
+        assert_eq!(l.begin_attempt("new", now + secs(59)), Ok(None));
         // Room frees up once entries expire
         assert!(matches!(
             l.begin_attempt("new", now + secs(60)),
             Ok(Some(_))
         ));
         assert_eq!(l.entries.len(), 1);
+        assert_eq!(l.next_capacity_prune, None);
+    }
+
+    #[test]
+    fn refund_to_zero_starts_new_window() {
+        let mut l = AuthRateLimiter::new(settings(2, 10, 300));
+        let now = Instant::now();
+        let token = l.begin_attempt("ip", now).unwrap().unwrap();
+        l.refund_attempt("ip", token);
+        assert!(l.entries.is_empty());
+        // Failures straddling the refunded attempt's window still count together
+        assert!(l.begin_attempt("ip", now + secs(9)).is_ok());
+        assert!(l.begin_attempt("ip", now + secs(11)).is_ok());
+        assert!(l.begin_attempt("ip", now + secs(11)).is_err());
     }
 
     #[test]
