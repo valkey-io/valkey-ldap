@@ -258,7 +258,7 @@ Notes:
 - Exempted users (`ldap.exempted_users_regex`) are not subject to the rate limit since they don't authenticate through LDAP.
 - Clients connected through a Unix socket have no IP address and are not rate limited.
 - Changing any of the rate limit settings clears all tracked failures and blocks.
-- State is kept in memory per Valkey node and is reset when the module is reloaded.
+- State is kept in memory per Valkey node and is reset when the module is reloaded. At most 100,000 IPs are tracked at once; once that many are tracked and none has expired, attempts from new IPs are not rate limited.
 
 ### Configuration
 
@@ -336,8 +336,8 @@ ldap_auth_rate_limit_blocked_ips:1
 | `ldap.exempted_users_regex` | string | `""` | Regex pattern to exempt certain users from LDAP authentication. Users matching this pattern will bypass LDAP and use local Valkey authentication. Useful for service accounts, monitoring users, and inter-node communication. Examples: `^(default|exporter|replication)$` or `^(admin\|metrics-.*)$`. |
 | `ldap.acl_fallback_enabled` | bool | `no` | Enable ACL fallback when LDAP server is unavailable. When enabled and LDAP authentication succeeds, the user's password is saved in the ACL. If the LDAP server becomes unavailable later, the user can still authenticate using the cached password in the ACL. Note: This only applies to server unavailability; credential rejections will never fall back to ACL. |
 | `ldap.auth_rate_limit_max_failures` | number | `0` | Number of failed LDAP authentications from a single client IP, within `ldap.auth_rate_limit_window`, after which the IP is blocked. `0` disables rate limiting. See [Rate Limiting Failed Authentications](#rate-limiting-failed-authentications). |
-| `ldap.auth_rate_limit_window` | number | `60` | Length, in seconds, of the window in which failed authentications are counted. |
-| `ldap.auth_rate_limit_block_duration` | number | `300` | Number of seconds a client IP stays blocked after reaching `ldap.auth_rate_limit_max_failures`. |
+| `ldap.auth_rate_limit_window` | number | `60` | Length, in seconds, of the window in which failed authentications are counted. Maximum one year (`31536000`). |
+| `ldap.auth_rate_limit_block_duration` | number | `300` | Number of seconds a client IP stays blocked after reaching `ldap.auth_rate_limit_max_failures`. Maximum one year (`31536000`). |
 
 ### Quick Setup: Dynamic ACL Rule Sync
 

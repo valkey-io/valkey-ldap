@@ -18,6 +18,7 @@ class AuthRateLimitTest(LdapTestCase):
         self.vk.execute_command(
             "CONFIG", "SET", "ldap.bind_dn_suffix", ",OU=devops,DC=valkey,DC=io"
         )
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "0")
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_window", "60")
         self.vk.execute_command(
             "CONFIG", "SET", "ldap.auth_rate_limit_block_duration", "300"

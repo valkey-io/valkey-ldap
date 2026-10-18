@@ -25,6 +25,12 @@ use log::{error, warn};
 /// Number of tracked IPs above which expired entries are pruned.
 const MIN_PRUNE_THRESHOLD: usize = 1024;
 
+/// Hard cap on the number of tracked IPs, to bound memory under a flood of
+/// failed attempts from many distinct addresses. When the cap is reached and
+/// no entry has expired, attempts from new IPs are admitted untracked so the
+/// existing failure counts and blocks are preserved.
+const MAX_TRACKED_IPS: usize = 100_000;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RateLimitSettings {
     pub max_failures: u64,
@@ -111,7 +117,20 @@ impl AuthRateLimiter {
         if let Some(remaining) = self.check(ip, now) {
             return Err(remaining);
         }
+        if !self.has_capacity_for(ip, now) {
+            return Ok(None);
+        }
         Ok(Some(self.record_failure(ip, now)))
+    }
+
+    // Returns true if `ip` is tracked or can be added without exceeding
+    // MAX_TRACKED_IPS, pruning expired entries if needed.
+    fn has_capacity_for(&mut self, ip: &str, now: Instant) -> bool {
+        if self.entries.len() < MAX_TRACKED_IPS || self.entries.contains_key(ip) {
+            return true;
+        }
+        self.prune(now);
+        self.entries.len() < MAX_TRACKED_IPS
     }
 
     /// Undoes the count of an admitted attempt that turned out not to be a
@@ -175,9 +194,12 @@ impl AuthRateLimiter {
     // doubles the threshold relative to the surviving entries so pruning
     // stays amortized O(1) per insertion.
     fn maybe_prune(&mut self, now: Instant) {
-        if self.entries.len() < self.prune_threshold {
-            return;
+        if self.entries.len() >= self.prune_threshold {
+            self.prune(now);
         }
+    }
+
+    fn prune(&mut self, now: Instant) {
         let settings = self.settings;
         self.entries.retain(|_, e| !e.is_expired(now, &settings));
         self.prune_threshold = MIN_PRUNE_THRESHOLD.max(self.entries.len() * 2);
@@ -223,14 +245,18 @@ pub struct Attempt {
 /// time if the IP is blocked. Returns `Ok(None)` when rate limiting is
 /// disabled.
 pub fn begin_attempt(ip: &str) -> Result<Option<Attempt>, Duration> {
-    let (res, blocked_now) = with_limiter(|l| {
+    let (res, blocked_now, untracked) = with_limiter(|l| {
         let now = Instant::now();
         let res = l.begin_attempt(ip, now);
         let blocked_now = matches!(res, Ok(Some(_))) && l.is_blocked(ip, now);
-        (res, blocked_now)
+        let untracked = matches!(res, Ok(None)) && l.settings.is_enabled();
+        (res, blocked_now, untracked)
     });
     if blocked_now {
         warn!("too many failed LDAP authentication attempts from {ip}, blocking it");
+    }
+    if untracked {
+        warn!("auth rate limiter is tracking {MAX_TRACKED_IPS} IPs, not tracking {ip}");
     }
     res.map(|token| {
         token.map(|token| Attempt {
@@ -362,6 +388,28 @@ mod tests {
         assert!(l.begin_attempt("ip", now).is_ok());
         l.configure(settings(5, 60, 300));
         assert!(matches!(l.begin_attempt("ip", now), Ok(Some(_))));
+    }
+
+    #[test]
+    fn caps_tracked_ips() {
+        let mut l = AuthRateLimiter::new(settings(5, 60, 300));
+        let now = Instant::now();
+        for i in 0..MAX_TRACKED_IPS {
+            assert!(matches!(
+                l.begin_attempt(&format!("ip{i}"), now),
+                Ok(Some(_))
+            ));
+        }
+        // New IPs are admitted untracked while existing ones keep counting
+        assert_eq!(l.begin_attempt("new", now), Ok(None));
+        assert!(matches!(l.begin_attempt("ip0", now), Ok(Some(_))));
+        assert_eq!(l.entries.len(), MAX_TRACKED_IPS);
+        // Room frees up once entries expire
+        assert!(matches!(
+            l.begin_attempt("new", now + secs(60)),
+            Ok(Some(_))
+        ));
+        assert_eq!(l.entries.len(), 1);
     }
 
     #[test]
