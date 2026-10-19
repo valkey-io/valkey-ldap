@@ -194,9 +194,15 @@ impl VkLdapConnection {
         Ok(VkLdapConnection { ldap_handler })
     }
 
-    pub async fn ping(&mut self) -> Result<()> {
+    pub async fn ping(&mut self, timeout: Duration) -> Result<()> {
+        // Without a timeout, a server that accepts the TCP connection but never
+        // answers (hung slapd, paused container, black-holed network) would block
+        // the failure detector forever, freezing every server's health status.
         handle_ldap_error!(
-            self.ldap_handler.extended(WhoAmI).await,
+            self.ldap_handler
+                .with_timeout(timeout)
+                .extended(WhoAmI)
+                .await,
             VkLdapError::LdapServerPingError
         );
         Ok(())
@@ -315,7 +321,13 @@ impl VkLdapConnection {
             attribute = &sattribute;
         }
 
-        let search_filter = format!("(&({filter})({attribute}={username}))");
+        // The username is untrusted input: escape it so characters such as `*`,
+        // `(`, `)` and `\` are matched literally instead of being interpreted as
+        // filter syntax (RFC 4515).
+        let search_filter = format!(
+            "(&({filter})({attribute}={}))",
+            ldap3::ldap_escape(username)
+        );
         let scope = settings.search_scope;
         let dn_attribute = &settings.search_dn_attribute;
 

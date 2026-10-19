@@ -14,11 +14,13 @@ use super::server::{VkLdapServer, VkLdapServerStatus};
 use super::{Result, scheduler};
 
 async fn check_server_health(server: VkLdapServer) {
+    let ping_timeout = context::get_ldap_operation_timeout().await;
+
     if server.is_healthy() {
         let mut pool_conn = context::get_pool_connection(&server).await;
 
         let now = Instant::now();
-        let res = pool_conn.conn.ping().await;
+        let res = pool_conn.conn.ping(ping_timeout).await;
         let ping_time = now.elapsed();
 
         if let Err(err) = res {
@@ -45,7 +47,7 @@ async fn check_server_health(server: VkLdapServer) {
 
         match conn_res {
             Ok(mut conn) => {
-                let res = conn.ping().await;
+                let res = conn.ping(ping_timeout).await;
                 match res {
                     Ok(_) => context::refresh_pool_connections(&server).await,
                     Err(err) => warn!("recovery ping failed for {}: {err}", server.get_url_ref()),
