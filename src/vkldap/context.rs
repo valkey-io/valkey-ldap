@@ -336,15 +336,17 @@ where
                                 // The server stopped answering after all: take it out
                                 // of rotation (the failure detector rebuilds its pool)
                                 // and fail over like the first probe failure does.
-                                tokio::spawn(
-                                    async move { pool.return_connection(pool_conn).await },
-                                );
+                                // Mark unhealthy before returning the connection so that
+                                // no request can dequeue it from a still-healthy server.
                                 update_server_status(
                                     &server,
                                     VkLdapServerStatus::UNHEALTHY(probe_err.to_string()),
                                     None,
                                 )
                                 .await;
+                                tokio::spawn(
+                                    async move { pool.return_connection(pool_conn).await },
+                                );
 
                                 debug!(
                                     "server became unreachable during ldap operation retry, failing over to other available server..."
@@ -355,13 +357,15 @@ where
                     }
                 }
                 Err(probe_err) => {
-                    tokio::spawn(async move { pool.return_connection(pool_conn).await });
+                    // Mark unhealthy before returning the connection so that no
+                    // request can dequeue it from a still-healthy server.
                     update_server_status(
                         &server,
                         VkLdapServerStatus::UNHEALTHY(probe_err.to_string()),
                         None,
                     )
                     .await;
+                    tokio::spawn(async move { pool.return_connection(pool_conn).await });
 
                     debug!(
                         "got connection error during ldap operation, failing over to other available server..."
