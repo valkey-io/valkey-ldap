@@ -104,12 +104,21 @@ def parse_valkey_info_section(section: str) -> dict:
             result[key.strip()] = value.strip()
         else:
             dict_key, dict_values = line.split(":", 1)
+            if "=" not in dict_values:
+                # Plain field, e.g. ldap_auth_rate_limit_enabled:yes
+                result[dict_key.strip()] = dict_values.strip()
+                continue
             nested_dict = {}
             for key_value_pair in dict_values.split(","):
                 key, value = key_value_pair.strip().split("=", 1)
                 nested_dict[key.strip()] = value.strip()
             result[dict_key.strip()] = nested_dict
     return result
+
+
+def ldap_servers(info: dict) -> list:
+    """Return the server entries (dictionaries) of a parsed INFO ldap reply"""
+    return [value for value in info.values() if isinstance(value, dict)]
 
 
 def clean_acl(client):
