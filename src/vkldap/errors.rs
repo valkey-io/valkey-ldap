@@ -78,6 +78,25 @@ impl VkLdapError {
         }
     }
 
+    /// Returns true if the error shows the attempt was not a wrong password
+    /// guess: either the request failed before the user's credentials were
+    /// sent to any LDAP server (no servers, module not ready), or the LDAP
+    /// service user failed to bind. That bind happens before the user's bind
+    /// in search+bind mode, and after the user's bind has already succeeded
+    /// when fetching group rules. Errors raised after the user's credentials
+    /// may have reached a server (connection errors, timeouts, no healthy
+    /// server left after failover, search errors) don't qualify: the module
+    /// can't tell whether the client caused them.
+    pub fn rules_out_wrong_password(&self) -> bool {
+        matches!(
+            self,
+            VkLdapError::NoServerConfigured
+                | VkLdapError::SchedulerNotReady
+                | VkLdapError::FailedToSendJobToScheduler(_)
+                | VkLdapError::LdapAdminBindError(_)
+        )
+    }
+
     /// Returns true if the error indicates the LDAP server is unavailable
     /// This is used to distinguish server unavailability from authentication failures
     pub fn is_server_unavailable(&self) -> bool {
@@ -224,4 +243,42 @@ macro_rules! handle_ldap_error {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ldap3::{LdapError, LdapResult};
+
+    fn ldap_result_error(rc: u32) -> LdapError {
+        LdapError::LdapResult {
+            result: LdapResult {
+                rc,
+                matched: String::new(),
+                text: String::new(),
+                refs: vec![],
+                ctrls: vec![],
+            },
+        }
+    }
+
+    #[test]
+    fn rules_out_wrong_password() {
+        assert!(VkLdapError::NoServerConfigured.rules_out_wrong_password());
+        assert!(VkLdapError::SchedulerNotReady.rules_out_wrong_password());
+        assert!(VkLdapError::LdapAdminBindError(ldap_result_error(49)).rules_out_wrong_password());
+    }
+
+    #[test]
+    fn may_be_wrong_password() {
+        // Wrong password, unwillingToPerform (e.g. empty password), errors
+        // during or after the user's bind, and ambiguous search results all
+        // stay counted
+        assert!(!VkLdapError::LdapBindError(ldap_result_error(49)).rules_out_wrong_password());
+        assert!(!VkLdapError::LdapBindError(ldap_result_error(53)).rules_out_wrong_password());
+        assert!(!VkLdapError::LdapSearchError(ldap_result_error(1)).rules_out_wrong_password());
+        assert!(!VkLdapError::NoHealthyServerAvailable(vec![]).rules_out_wrong_password());
+        assert!(!VkLdapError::MultipleEntryFound("uid=x*".to_string()).rules_out_wrong_password());
+        assert!(!VkLdapError::NoLdapEntryFound("uid=x".to_string()).rules_out_wrong_password());
+    }
 }

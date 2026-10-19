@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from valkey.exceptions import AuthenticationError, ConnectionError, ResponseError
 import valkey
 
-from util import DOCKER_SERVICES, LdapTestCase, parse_valkey_info_section
+from util import DOCKER_SERVICES, LdapTestCase, ldap_servers, parse_valkey_info_section
 
 
 class LdapModuleTest(TestCase):
@@ -207,7 +207,7 @@ class LdapModuleCredentialValidationTest(LdapTestCase):
         info = parse_valkey_info_section(
             self.vk.execute_command("INFO LDAP").decode("utf-8")
         )
-        servers = [s for s in info.values() if isinstance(s, dict) and "host" in s]
+        servers = ldap_servers(info)
         self.assertTrue(servers)
         for server in servers:
             self.assertEqual(server.get("status"), "healthy", server)
@@ -271,7 +271,7 @@ class LdapModuleFailoverTest(LdapTestCase):
             result = self.vk.execute_command("INFO LDAP")
             status = parse_valkey_info_section(result.decode("utf-8"))
 
-            for server in status.values():
+            for server in ldap_servers(status):
                 if server["host"] == server_name:
                     if server["status"] == status_desc:
                         return
@@ -319,7 +319,7 @@ class LdapModuleFailoverTest(LdapTestCase):
             info = parse_valkey_info_section(
                 self.vk.execute_command("INFO LDAP").decode("utf-8")
             )
-            for server in info.values():
+            for server in ldap_servers(info):
                 if server.get("host") in ("ldap", "ldap-2"):
                     self.assertEqual(server.get("status"), "unhealthy")
                     self.assertTrue(
@@ -337,7 +337,7 @@ class LdapModuleFailoverTest(LdapTestCase):
         while time.time() < end:
             result = self.vk.execute_command("INFO LDAP")
             status = parse_valkey_info_section(result.decode("utf-8"))
-            for server in status.values():
+            for server in ldap_servers(status):
                 if server["host"] == server_name and server["status"] == status_desc:
                     return
             time.sleep(1)
@@ -444,7 +444,7 @@ class LdapPoolReconstructionTest(LdapTestCase):
         while True:
             result = self.vk.execute_command("INFO LDAP")
             status = parse_valkey_info_section(result.decode("utf-8"))
-            for server in status.values():
+            for server in ldap_servers(status):
                 if server["host"] == server_name:
                     if server["status"] == status_desc:
                         return
@@ -472,7 +472,7 @@ class LdapPoolReconstructionTest(LdapTestCase):
     def _get_ldap_server_status(self):
         result = self.vk.execute_command("INFO LDAP")
         status = parse_valkey_info_section(result.decode("utf-8"))
-        for server in status.values():
+        for server in ldap_servers(status):
             if server.get("host") == "ldap":
                 return server.get("status")
         return None

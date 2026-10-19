@@ -9,6 +9,7 @@ use valkey_module::{
     configuration::ConfigurationContext,
 };
 
+use crate::rate_limit::{self, RateLimitSettings};
 use crate::vkldap::failure_detector;
 use crate::vkldap::settings::VkLdapSettings;
 use crate::vkldap::{self, settings::VkConnectionSettings};
@@ -74,6 +75,9 @@ enum_configuration2! {
     }
 }
 
+/// Upper bound (one year) for the rate limit window and block duration configs.
+pub const MAX_RATE_LIMIT_DURATION_SECS: i64 = 365 * 24 * 60 * 60;
+
 lazy_static! {
     pub static ref LDAP_SERVER_LIST: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
@@ -131,6 +135,11 @@ lazy_static! {
     pub static ref LDAP_EXEMPTED_USERS_REGEX: ValkeyGILGuard<ValkeyString> =
         ValkeyGILGuard::new(ValkeyString::create(None, ""));
     pub static ref LDAP_ACL_FALLBACK_ENABLED: ValkeyGILGuard<bool> = ValkeyGILGuard::default();
+    // Per-IP rate limiting of failed authentications (disabled when max_failures is 0)
+    pub static ref LDAP_AUTH_RATE_LIMIT_MAX_FAILURES: ValkeyGILGuard<i64> = ValkeyGILGuard::new(0);
+    pub static ref LDAP_AUTH_RATE_LIMIT_WINDOW: ValkeyGILGuard<i64> = ValkeyGILGuard::new(60);
+    pub static ref LDAP_AUTH_RATE_LIMIT_BLOCK_DURATION: ValkeyGILGuard<i64> =
+        ValkeyGILGuard::new(300);
 }
 
 lazy_static! {
@@ -272,6 +281,18 @@ pub fn failure_detector_interval_changed<G, T: ConfigurationValue<G>>(
     _val: &'static T,
 ) {
     failure_detector::set_failure_detector_interval(get_failure_detector_interval_secs(ctx));
+}
+
+pub fn refresh_rate_limit_settings<T: ValkeyLockIndicator>(ctx: &T) {
+    rate_limit::configure(get_rate_limit_settings(ctx));
+}
+
+pub fn on_rate_limit_setting_change<G, T: ConfigurationValue<G>>(
+    ctx: &ConfigurationContext,
+    _name: &str,
+    _val: &'static T,
+) {
+    refresh_rate_limit_settings(ctx);
 }
 
 pub fn ldap_server_list_set_callback(
@@ -534,4 +555,15 @@ pub fn exempted_users_regex_set_callback(
 pub fn get_return_auth_errors<T: ValkeyLockIndicator>(ctx: &T) -> bool {
     let return_errors = LDAP_RETURN_AUTH_ERRORS.lock(ctx);
     *return_errors
+}
+
+pub fn get_rate_limit_settings<T: ValkeyLockIndicator>(ctx: &T) -> RateLimitSettings {
+    let max_failures = *LDAP_AUTH_RATE_LIMIT_MAX_FAILURES.lock(ctx);
+    let window = *LDAP_AUTH_RATE_LIMIT_WINDOW.lock(ctx);
+    let block_duration = *LDAP_AUTH_RATE_LIMIT_BLOCK_DURATION.lock(ctx);
+    RateLimitSettings {
+        max_failures: max_failures as u64,
+        window: Duration::from_secs(window as u64),
+        block_duration: Duration::from_secs(block_duration as u64),
+    }
 }

@@ -2,6 +2,7 @@ use log::error;
 use valkey_module::{InfoContext, ValkeyError, ValkeyResult};
 use valkey_module_macros::info_command_handler;
 
+use crate::rate_limit;
 use crate::vkldap::{get_servers_health_status, server::VkLdapServerStatus};
 
 #[info_command_handler]
@@ -46,7 +47,19 @@ fn add_ldap_status_section(ctx: &InfoContext, _for_crash_report: bool) -> Valkey
         builder = dict.build_dictionary()?;
     }
 
-    builder.build_section()?.build_info()?;
+    let mut builder = builder.build_section()?;
+    // Don't wait on the limiter's lock while building a crash report
+    if let Some((enabled, blocked)) = rate_limit::info_snapshot(_for_crash_report) {
+        builder = builder
+            .add_section("auth_rate_limit")
+            .field(
+                "auth_rate_limit_enabled",
+                if enabled { "yes" } else { "no" },
+            )?
+            .field("auth_rate_limit_blocked_ips", blocked.to_string())?
+            .build_section()?;
+    }
+    builder.build_info()?;
 
     Ok(())
 }
