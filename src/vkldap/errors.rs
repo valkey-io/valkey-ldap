@@ -78,16 +78,19 @@ impl VkLdapError {
         }
     }
 
-    /// Returns true if the error means the client presented wrong credentials
-    /// or an unknown username, as opposed to a server-side, configuration or
-    /// connectivity problem.
-    pub fn is_credential_failure(&self) -> bool {
-        self.is_user_not_found()
-            || matches!(
-                self,
-                VkLdapError::LdapBindError(ldap3::LdapError::LdapResult { result })
-                    if result.rc == 49
-            )
+    /// Returns true if the request failed before the user's credentials were
+    /// sent to any LDAP server, so the attempt can't have been a password
+    /// guess. Errors raised after a server was contacted (connection errors,
+    /// timeouts, no healthy server left after failover, search errors) don't
+    /// qualify: the module can't tell whether the client caused them.
+    pub fn credentials_never_sent(&self) -> bool {
+        matches!(
+            self,
+            VkLdapError::NoServerConfigured
+                | VkLdapError::SchedulerNotReady
+                | VkLdapError::FailedToSendJobToScheduler(_)
+                | VkLdapError::LdapAdminBindError(_)
+        )
     }
 
     /// Returns true if the error indicates the LDAP server is unavailable
@@ -243,41 +246,35 @@ mod tests {
     use super::*;
     use ldap3::{LdapError, LdapResult};
 
-    fn bind_error(rc: u32, text: &str) -> VkLdapError {
-        VkLdapError::LdapBindError(LdapError::LdapResult {
+    fn ldap_result_error(rc: u32) -> LdapError {
+        LdapError::LdapResult {
             result: LdapResult {
                 rc,
-                matched: String::new(),
-                text: text.to_string(),
-                refs: vec![],
-                ctrls: vec![],
-            },
-        })
-    }
-
-    #[test]
-    fn credential_failures() {
-        assert!(bind_error(49, "invalid credentials").is_credential_failure());
-        assert!(bind_error(32, "no such object").is_credential_failure());
-        assert!(VkLdapError::NoLdapEntryFound("uid=x".to_string()).is_credential_failure());
-    }
-
-    #[test]
-    fn non_credential_failures() {
-        // unwillingToPerform, admin bind and search errors are not the
-        // client's fault
-        assert!(!bind_error(53, "unwilling to perform").is_credential_failure());
-        let admin = VkLdapError::LdapAdminBindError(LdapError::LdapResult {
-            result: LdapResult {
-                rc: 49,
                 matched: String::new(),
                 text: String::new(),
                 refs: vec![],
                 ctrls: vec![],
             },
-        });
-        assert!(!admin.is_credential_failure());
-        assert!(!VkLdapError::MultipleEntryFound("uid=x".to_string()).is_credential_failure());
-        assert!(!VkLdapError::NoHealthyServerAvailable(vec![]).is_credential_failure());
+        }
+    }
+
+    #[test]
+    fn credentials_never_sent() {
+        assert!(VkLdapError::NoServerConfigured.credentials_never_sent());
+        assert!(VkLdapError::SchedulerNotReady.credentials_never_sent());
+        assert!(VkLdapError::LdapAdminBindError(ldap_result_error(49)).credentials_never_sent());
+    }
+
+    #[test]
+    fn credentials_possibly_sent() {
+        // Wrong password, unwillingToPerform (e.g. empty password), errors
+        // during or after the user's bind, and ambiguous search results all
+        // stay counted
+        assert!(!VkLdapError::LdapBindError(ldap_result_error(49)).credentials_never_sent());
+        assert!(!VkLdapError::LdapBindError(ldap_result_error(53)).credentials_never_sent());
+        assert!(!VkLdapError::LdapSearchError(ldap_result_error(1)).credentials_never_sent());
+        assert!(!VkLdapError::NoHealthyServerAvailable(vec![]).credentials_never_sent());
+        assert!(!VkLdapError::MultipleEntryFound("uid=x*".to_string()).credentials_never_sent());
+        assert!(!VkLdapError::NoLdapEntryFound("uid=x".to_string()).credentials_never_sent());
     }
 }

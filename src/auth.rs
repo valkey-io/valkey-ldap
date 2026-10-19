@@ -5,7 +5,7 @@ use valkey_module::BlockedClient;
 use valkey_module::{AUTH_HANDLED, AUTH_NOT_HANDLED, Context, Status, ValkeyError, ValkeyString};
 
 use crate::configs;
-use crate::rate_limit;
+use crate::rate_limit::{self, Admission};
 use crate::vkldap;
 use crate::vkldap::errors::VkLdapError;
 
@@ -140,17 +140,33 @@ type AuthReplyData = (
     Result<Vec<String>, VkLdapError>,
 );
 
-/// Returns the client's IP address when auth rate limiting is enabled.
-fn rate_limited_client_ip(ctx: &Context) -> Option<String> {
+/// Returns the key the client is rate limited under, when auth rate
+/// limiting is enabled. Clients whose address can't be determined share one
+/// key rather than escaping the limiter.
+fn rate_limit_key(ctx: &Context) -> Option<String> {
     if !rate_limit::is_enabled() {
         return None;
     }
-    match ctx.get_client_ip_by_id(ctx.get_client_id()) {
-        Ok(ip) if !ip.is_empty() => Some(ip),
-        Ok(_) => None,
-        Err(e) => {
-            debug!("could not get client IP for auth rate limiting: {e}");
-            None
+    let addr = ctx
+        .get_client_ip_by_id(ctx.get_client_id())
+        .unwrap_or_else(|e| {
+            debug!("could not get client address for auth rate limiting: {e}");
+            String::new()
+        });
+    Some(rate_limit::client_key(&addr))
+}
+
+/// Whether an attempt admitted by the rate limiter can be refunded. Attempts
+/// stay counted unless LDAP accepted the credentials, or the request failed
+/// before the credentials were sent to LDAP and the client isn't passed on to
+/// Valkey's own password check (ACL fallback), whose outcome the module can't
+/// see.
+fn should_refund(ctx: &Context, result: &Result<Vec<String>, VkLdapError>) -> bool {
+    match result {
+        Ok(_) => true,
+        Err(err) => {
+            err.credentials_never_sent()
+                && !(err.is_server_unavailable() && configs::is_acl_fallback_enabled(ctx))
         }
     }
 }
@@ -190,11 +206,10 @@ fn auth_reply_callback(
 
 /// Called once for every attempt's private data, including when the client
 /// disconnected before the reply callback could run. The rate limiter counted
-/// the attempt when it was admitted, so refund it unless it was a credential
-/// failure.
-fn free_callback(_: &Context, (attempt, result): AuthReplyData) {
+/// the attempt when it was admitted; refund it if it wasn't a failure.
+fn free_callback(ctx: &Context, (attempt, result): AuthReplyData) {
     if let Some(attempt) = attempt {
-        if !matches!(&result, Err(err) if err.is_credential_failure()) {
+        if should_refund(ctx, &result) {
             rate_limit::refund_attempt(&attempt);
         }
     }
@@ -217,10 +232,10 @@ pub fn ldap_auth_blocking_callback(
         return Ok(AUTH_NOT_HANDLED);
     }
 
-    let attempt = match rate_limited_client_ip(ctx).map(|ip| rate_limit::begin_attempt(&ip)) {
-        None => None,
-        Some(Ok(attempt)) => attempt,
-        Some(Err(remaining)) => {
+    let attempt = match rate_limit_key(ctx).map(|key| rate_limit::begin_attempt(&key)) {
+        None | Some(Admission::NotLimited) => None,
+        Some(Admission::Admitted(attempt)) => Some(attempt),
+        Some(Admission::Blocked(remaining)) => {
             debug!(
                 "rejecting LDAP authentication: client is rate limited for another {}s",
                 remaining.as_secs()
@@ -262,12 +277,15 @@ pub fn ldap_auth_blocking_callback(
         Ok(_) => Ok(AUTH_HANDLED),
         Err(err) => {
             error!("failed to submit ldap bind request: {err}");
-            if let Some(attempt) = &submitted_attempt {
-                rate_limit::refund_attempt(attempt);
-            }
             if configs::get_return_auth_errors(ctx) {
+                // The credentials never reached LDAP and the client gets an
+                // error, so the attempt doesn't count
+                if let Some(attempt) = &submitted_attempt {
+                    rate_limit::refund_attempt(attempt);
+                }
                 Err(ValkeyError::String(err.to_string()))
             } else {
+                // Valkey's own password check runs next; keep it counted
                 Ok(AUTH_NOT_HANDLED)
             }
         }

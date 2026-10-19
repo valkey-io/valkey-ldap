@@ -29,6 +29,9 @@ class AuthRateLimitTest(LdapTestCase):
         self.client = valkey.Valkey(host="localhost", port=6379, db=0)
 
     def tearDown(self):
+        self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://ldap ldap://ldap-2")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "no")
+        self.vk.execute_command("ACL", "DELUSER", "fallbackuser")
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "0")
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_window", "60")
         self.vk.execute_command(
@@ -99,6 +102,8 @@ class AuthRateLimitTest(LdapTestCase):
         self.vk.execute_command(
             "CONFIG", "SET", "ldap.auth_rate_limit_block_duration", "2"
         )
+        # A block also lasts until the window ends
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_window", "2")
 
         self._fail_auth(2)
         self._assert_rate_limited()
@@ -117,3 +122,20 @@ class AuthRateLimitTest(LdapTestCase):
 
         # The exempted default user keeps authenticating through the local ACL
         self.client.execute_command("AUTH", "default", "anything")
+
+    def test_acl_fallback_attempts_are_counted(self):
+        # With LDAP unreachable and ACL fallback enabled, attempts fall through
+        # to Valkey's own password check, so they must still be counted.
+        self.vk.execute_command("ACL", "SETUSER", "fallbackuser", "on", ">secret", "+@all", "~*")
+        self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
+        self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://127.0.0.1:1")
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "3")
+
+        for _ in range(3):
+            with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
+                self.client.execute_command("AUTH", "fallbackuser", "wrong")
+            self.assertNotIn(RATE_LIMIT_ERROR, str(ctx.exception))
+
+        with self.assertRaises((AuthenticationError, ResponseError)) as ctx:
+            self.client.execute_command("AUTH", "fallbackuser", "secret")
+        self.assertIn(RATE_LIMIT_ERROR, str(ctx.exception))
