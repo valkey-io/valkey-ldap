@@ -170,13 +170,13 @@ fn falls_through_to_acl(ctx: &Context, err: &VkLdapError) -> bool {
 }
 
 /// Whether an attempt admitted by the rate limiter can be refunded. Attempts
-/// stay counted unless LDAP accepted the credentials, or the request failed
-/// before the credentials were sent to LDAP and the client isn't passed on to
-/// Valkey's own password check, whose outcome the module can't see.
+/// stay counted unless LDAP accepted the credentials, or the error rules out
+/// a wrong password and the client isn't passed on to Valkey's own password
+/// check, whose outcome the module can't see.
 fn should_refund(ctx: &Context, result: &Result<Vec<String>, VkLdapError>) -> bool {
     match result {
         Ok(_) => true,
-        Err(err) => err.credentials_never_sent() && !falls_through_to_acl(ctx, err),
+        Err(err) => err.rules_out_wrong_password() && !falls_through_to_acl(ctx, err),
     }
 }
 

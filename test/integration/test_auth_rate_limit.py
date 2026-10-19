@@ -129,6 +129,13 @@ class AuthRateLimitTest(LdapTestCase):
         self.vk.execute_command("ACL", "SETUSER", "fallbackuser", "on", ">secret", "+@all", "~*")
         self.vk.execute_command("CONFIG", "SET", "ldap.acl_fallback_enabled", "yes")
         self.vk.execute_command("CONFIG", "SET", "ldap.servers", "ldap://127.0.0.1:1")
+
+        # Make sure attempts really fall back to the ACL password check
+        self.client.execute_command("AUTH", "fallbackuser", "secret")
+        self.assertEqual(
+            self.client.execute_command("ACL", "WHOAMI").decode(), "fallbackuser"
+        )
+
         self.vk.execute_command("CONFIG", "SET", "ldap.auth_rate_limit_max_failures", "3")
 
         for _ in range(3):
