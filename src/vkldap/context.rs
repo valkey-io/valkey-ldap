@@ -327,8 +327,19 @@ where
                         debug!(
                             "ldap operation failed twice with a connection error on a healthy server, not failing over"
                         );
-                        if let Ok(fresh_conn) = open_verified_connection(&server).await {
-                            pool_conn.conn = fresh_conn;
+                        match open_verified_connection(&server).await {
+                            Ok(fresh_conn) => pool_conn.conn = fresh_conn,
+                            Err(probe_err) => {
+                                // The server stopped answering after all: take it out
+                                // of rotation so the failure detector rebuilds the pool
+                                // instead of requests reusing the broken connection.
+                                update_server_status(
+                                    &server,
+                                    VkLdapServerStatus::UNHEALTHY(probe_err.to_string()),
+                                    None,
+                                )
+                                .await;
+                            }
                         }
                     }
                 }

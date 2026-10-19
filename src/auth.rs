@@ -21,17 +21,17 @@ const MAX_PASSWORD_LEN: usize = 1024;
 ///   some servers (e.g. Active Directory) report as successful.
 /// - Oversized credentials are rejected so that a client cannot make the LDAP
 ///   server drop the connection (and so trigger a failover) with a huge PDU.
-fn validate_credentials(username: &[u8], password: &[u8]) -> Result<(), &'static str> {
-    if username.is_empty() {
+fn validate_credentials(username_len: usize, password_len: usize) -> Result<(), &'static str> {
+    if username_len == 0 {
         return Err("LDAP authentication failure: empty username");
     }
-    if password.is_empty() {
+    if password_len == 0 {
         return Err("LDAP authentication failure: empty password");
     }
-    if username.len() > MAX_USERNAME_LEN {
+    if username_len > MAX_USERNAME_LEN {
         return Err("LDAP authentication failure: username too long");
     }
-    if password.len() > MAX_PASSWORD_LEN {
+    if password_len > MAX_PASSWORD_LEN {
         return Err("LDAP authentication failure: password too long");
     }
     Ok(())
@@ -213,7 +213,7 @@ pub fn ldap_auth_blocking_callback(
         return Ok(AUTH_NOT_HANDLED);
     }
 
-    if let Err(msg) = validate_credentials(username.as_slice(), password.as_slice()) {
+    if let Err(msg) = validate_credentials(username.as_slice().len(), password.as_slice().len()) {
         debug!("rejecting LDAP authentication before contacting the server: {msg}");
         return Err(ValkeyError::Str(msg));
     }
@@ -259,28 +259,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_validate_credentials_accepts_regular_credentials() {
-        assert!(validate_credentials(b"user1", b"user1@123").is_ok());
-        assert!(validate_credentials(&[b'u'; MAX_USERNAME_LEN], &[b'p'; MAX_PASSWORD_LEN]).is_ok());
+    fn test_validate_credentials_accepts_regular_lengths() {
+        assert!(validate_credentials(5, 9).is_ok());
+        assert!(validate_credentials(MAX_USERNAME_LEN, MAX_PASSWORD_LEN).is_ok());
     }
 
     #[test]
     fn test_validate_credentials_rejects_empty_password() {
-        assert!(validate_credentials(b"user1", b"").is_err());
+        assert!(validate_credentials(5, 0).is_err());
     }
 
     #[test]
     fn test_validate_credentials_rejects_empty_username() {
-        assert!(validate_credentials(b"", b"user1@123").is_err());
+        assert!(validate_credentials(0, 9).is_err());
     }
 
     #[test]
     fn test_validate_credentials_rejects_oversized_username() {
-        assert!(validate_credentials(&[b'u'; MAX_USERNAME_LEN + 1], b"user1@123").is_err());
+        assert!(validate_credentials(MAX_USERNAME_LEN + 1, 9).is_err());
     }
 
     #[test]
     fn test_validate_credentials_rejects_oversized_password() {
-        assert!(validate_credentials(b"user1", &[b'p'; MAX_PASSWORD_LEN + 1]).is_err());
+        assert!(validate_credentials(5, MAX_PASSWORD_LEN + 1).is_err());
     }
 }
