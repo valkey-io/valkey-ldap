@@ -156,18 +156,27 @@ fn rate_limit_key(ctx: &Context) -> Option<String> {
     Some(rate_limit::client_key(&addr))
 }
 
+/// Whether a failed LDAP authentication is passed on to Valkey's own
+/// password check. Mirrors the routing in `auth_reply_callback`.
+fn falls_through_to_acl(ctx: &Context, err: &VkLdapError) -> bool {
+    if err.is_user_not_found() {
+        false
+    } else if err.is_server_unavailable() {
+        configs::is_acl_fallback_enabled(ctx)
+    } else {
+        // handle_credential_rejection
+        !configs::get_return_auth_errors(ctx)
+    }
+}
+
 /// Whether an attempt admitted by the rate limiter can be refunded. Attempts
 /// stay counted unless LDAP accepted the credentials, or the request failed
 /// before the credentials were sent to LDAP and the client isn't passed on to
-/// Valkey's own password check (ACL fallback), whose outcome the module can't
-/// see.
+/// Valkey's own password check, whose outcome the module can't see.
 fn should_refund(ctx: &Context, result: &Result<Vec<String>, VkLdapError>) -> bool {
     match result {
         Ok(_) => true,
-        Err(err) => {
-            err.credentials_never_sent()
-                && !(err.is_server_unavailable() && configs::is_acl_fallback_enabled(ctx))
-        }
+        Err(err) => err.credentials_never_sent() && !falls_through_to_acl(ctx, err),
     }
 }
 
