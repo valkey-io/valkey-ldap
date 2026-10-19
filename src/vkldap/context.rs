@@ -321,24 +321,35 @@ where
                     op_res = ldap_op(&mut pool_conn.conn).await;
 
                     if is_connection_error(&op_res) {
-                        // The server is healthy but keeps dropping this request, so
-                        // the request is the problem. Fail it without failing over,
-                        // and replace the connection it broke.
-                        debug!(
-                            "ldap operation failed twice with a connection error on a healthy server, not failing over"
-                        );
                         match open_verified_connection(&server).await {
-                            Ok(fresh_conn) => pool_conn.conn = fresh_conn,
+                            Ok(fresh_conn) => {
+                                // The server is healthy but keeps dropping this
+                                // request, so the request is the problem. Fail it
+                                // without failing over, and replace the connection
+                                // it broke.
+                                debug!(
+                                    "ldap operation failed twice with a connection error on a healthy server, not failing over"
+                                );
+                                pool_conn.conn = fresh_conn;
+                            }
                             Err(probe_err) => {
                                 // The server stopped answering after all: take it out
-                                // of rotation so the failure detector rebuilds the pool
-                                // instead of requests reusing the broken connection.
+                                // of rotation (the failure detector rebuilds its pool)
+                                // and fail over like the first probe failure does.
+                                tokio::spawn(
+                                    async move { pool.return_connection(pool_conn).await },
+                                );
                                 update_server_status(
                                     &server,
                                     VkLdapServerStatus::UNHEALTHY(probe_err.to_string()),
                                     None,
                                 )
                                 .await;
+
+                                debug!(
+                                    "server became unreachable during ldap operation retry, failing over to other available server..."
+                                );
+                                continue;
                             }
                         }
                     }
