@@ -9,6 +9,35 @@ use crate::rate_limit::{self, Admission};
 use crate::vkldap;
 use crate::vkldap::errors::VkLdapError;
 
+/// Maximum accepted username length, in bytes, for LDAP authentication.
+const MAX_USERNAME_LEN: usize = 256;
+
+/// Maximum accepted password length, in bytes, for LDAP authentication.
+const MAX_PASSWORD_LEN: usize = 1024;
+
+/// Validate credentials before they are sent to the LDAP server.
+///
+/// - An empty password must be rejected: per RFC 4513 section 5.1.2, a simple
+///   bind with a DN and an empty password is an "unauthenticated bind", which
+///   some servers (e.g. Active Directory) report as successful.
+/// - Oversized credentials are rejected so that a client cannot make the LDAP
+///   server drop the connection (and so trigger a failover) with a huge PDU.
+fn validate_credentials(username_len: usize, password_len: usize) -> Result<(), &'static str> {
+    if username_len == 0 {
+        return Err("LDAP authentication failure: empty username");
+    }
+    if password_len == 0 {
+        return Err("LDAP authentication failure: empty password");
+    }
+    if username_len > MAX_USERNAME_LEN {
+        return Err("LDAP authentication failure: username too long");
+    }
+    if password_len > MAX_PASSWORD_LEN {
+        return Err("LDAP authentication failure: password too long");
+    }
+    Ok(())
+}
+
 /// Apply ACL rules to a successfully authenticated LDAP user
 fn apply_ldap_user_acl(
     ctx: &Context,
@@ -241,6 +270,11 @@ pub fn ldap_auth_blocking_callback(
         return Ok(AUTH_NOT_HANDLED);
     }
 
+    if let Err(msg) = validate_credentials(username.as_slice().len(), password.as_slice().len()) {
+        debug!("rejecting LDAP authentication before contacting the server: {msg}");
+        return Err(ValkeyError::Str(msg));
+    }
+
     let attempt = match rate_limit_key(ctx).map(|key| rate_limit::begin_attempt(&key)) {
         None | Some(Admission::NotLimited) => None,
         Some(Admission::Admitted(attempt)) => Some(attempt),
@@ -298,5 +332,36 @@ pub fn ldap_auth_blocking_callback(
                 Ok(AUTH_NOT_HANDLED)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_credentials_accepts_regular_lengths() {
+        assert!(validate_credentials(5, 9).is_ok());
+        assert!(validate_credentials(MAX_USERNAME_LEN, MAX_PASSWORD_LEN).is_ok());
+    }
+
+    #[test]
+    fn test_validate_credentials_rejects_empty_password() {
+        assert!(validate_credentials(5, 0).is_err());
+    }
+
+    #[test]
+    fn test_validate_credentials_rejects_empty_username() {
+        assert!(validate_credentials(0, 9).is_err());
+    }
+
+    #[test]
+    fn test_validate_credentials_rejects_oversized_username() {
+        assert!(validate_credentials(MAX_USERNAME_LEN + 1, 9).is_err());
+    }
+
+    #[test]
+    fn test_validate_credentials_rejects_oversized_password() {
+        assert!(validate_credentials(5, MAX_PASSWORD_LEN + 1).is_err());
     }
 }

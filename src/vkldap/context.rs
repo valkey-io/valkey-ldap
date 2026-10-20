@@ -261,6 +261,32 @@ pub(super) async fn refresh_pool_connections(server: &VkLdapServer) {
     }
 }
 
+pub(super) async fn get_ldap_operation_timeout() -> Duration {
+    VK_LDAP_CONTEXT
+        .lock()
+        .await
+        .ldap_settings
+        .timeout_ldap_operation
+}
+
+/// Opens a new connection to `server` and checks that it answers a ping.
+async fn open_verified_connection(server: &VkLdapServer) -> Result<VkLdapConnection> {
+    let (conn_settings, timeout) = {
+        let ldap_ctx = VK_LDAP_CONTEXT.lock().await;
+        (
+            ldap_ctx.get_connection_settings(),
+            ldap_ctx.ldap_settings.timeout_ldap_operation,
+        )
+    };
+    let mut conn = VkLdapConnection::new(&conn_settings, server).await?;
+    conn.ping(timeout).await?;
+    Ok(conn)
+}
+
+fn is_connection_error<T>(res: &Result<T>) -> bool {
+    matches!(res, Err(VkLdapError::LdapConnectionError(_)))
+}
+
 async fn run_ldap_op_with_failover<F>(ldap_op: F) -> Result<()>
 where
     F: AsyncFn(&mut VkLdapConnection) -> Result<()>,
@@ -276,21 +302,80 @@ where
 
         let mut pool_conn = pool.take_connection().await;
 
-        let op_res = ldap_op(&mut pool_conn.conn).await;
+        let mut op_res = ldap_op(&mut pool_conn.conn).await;
 
-        tokio::spawn(async move { pool.return_connection(pool_conn).await });
+        if is_connection_error(&op_res) {
+            // A connection error does not necessarily mean the server is down:
+            // the pooled connection may be stale (e.g. closed by an idle timeout),
+            // or the request itself may have made the server drop the connection
+            // (e.g. an oversized or malformed PDU). Probe the server with a fresh
+            // connection before taking it out of rotation, so that a single client
+            // request cannot mark a healthy server as unhealthy.
+            match open_verified_connection(&server).await {
+                Ok(fresh_conn) => {
+                    debug!(
+                        "got connection error during ldap operation but server {} is reachable, retrying on a new connection",
+                        server.get_url_ref()
+                    );
+                    pool_conn.conn = fresh_conn;
+                    op_res = ldap_op(&mut pool_conn.conn).await;
 
-        if let Err(err) = &op_res {
-            if let VkLdapError::LdapConnectionError(_) = err {
-                let err_msg = err.to_string();
-                update_server_status(&server, VkLdapServerStatus::UNHEALTHY(err_msg), None).await;
+                    if is_connection_error(&op_res) {
+                        match open_verified_connection(&server).await {
+                            Ok(fresh_conn) => {
+                                // The server is healthy but keeps dropping this
+                                // request, so the request is the problem. Fail it
+                                // without failing over, and replace the connection
+                                // it broke.
+                                debug!(
+                                    "ldap operation failed twice with a connection error on a healthy server, not failing over"
+                                );
+                                pool_conn.conn = fresh_conn;
+                            }
+                            Err(probe_err) => {
+                                // The server stopped answering after all: take it out
+                                // of rotation (the failure detector rebuilds its pool)
+                                // and fail over like the first probe failure does.
+                                // Mark unhealthy before returning the connection so that
+                                // no request can dequeue it from a still-healthy server.
+                                update_server_status(
+                                    &server,
+                                    VkLdapServerStatus::UNHEALTHY(probe_err.to_string()),
+                                    None,
+                                )
+                                .await;
+                                tokio::spawn(
+                                    async move { pool.return_connection(pool_conn).await },
+                                );
 
-                debug!(
-                    "got connection error during ldap operation, failing over to other available server..."
-                );
-                continue;
+                                debug!(
+                                    "server became unreachable during ldap operation retry, failing over to other available server..."
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                }
+                Err(probe_err) => {
+                    // Mark unhealthy before returning the connection so that no
+                    // request can dequeue it from a still-healthy server.
+                    update_server_status(
+                        &server,
+                        VkLdapServerStatus::UNHEALTHY(probe_err.to_string()),
+                        None,
+                    )
+                    .await;
+                    tokio::spawn(async move { pool.return_connection(pool_conn).await });
+
+                    debug!(
+                        "got connection error during ldap operation, failing over to other available server..."
+                    );
+                    continue;
+                }
             }
         }
+
+        tokio::spawn(async move { pool.return_connection(pool_conn).await });
 
         return op_res;
     }

@@ -29,6 +29,18 @@ class DockerServices:
         ct.kill()
         return ct
 
+    def pause_service(self, name: str):
+        ct = self._find_container(name)
+        if ct is None:
+            raise RuntimeError(f"Container '{name}' not found")
+        ct.pause()
+        return ct
+
+    def unpause_service(self, serv):
+        serv.reload()
+        if serv.status == "paused":
+            serv.unpause()
+
     def restart_service(self, serv):
         if serv is None:
             raise RuntimeError("Cannot restart an unknown container")

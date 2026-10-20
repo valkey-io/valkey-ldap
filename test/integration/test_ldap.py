@@ -154,6 +154,101 @@ class LdapModuleBindAndSearchTest(LdapTestCase):
             self.assertNotEqual(res[i].decode("utf-8"), "ldap.search_bind_passwd")
 
 
+class LdapModuleSearchFilterInjectionTest(LdapTestCase):
+    def setUp(self):
+        super(LdapModuleSearchFilterInjectionTest, self).setUp()
+
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "search+bind")
+        self.vk.execute_command("CONFIG", "SET", "ldap.search_filter", "objectClass=*")
+        self.vk.execute_command("CONFIG", "SET", "ldap.search_attribute", "uid")
+
+    def _assert_unknown_user(self, username, password):
+        with self.assertRaises(ResponseError) as ctx:
+            self.vk.execute_command("AUTH", username, password)
+        self.assertIn("User not found in LDAP", str(ctx.exception))
+
+    def test_wildcard_username_is_not_a_filter(self):
+        self.vk.execute_command("CONFIG", "SET", "ldap.return_auth_errors", "yes")
+
+        # Unescaped, '(uid=u*)' matches u2 and binding with u2's password
+        # would log the client in as the Valkey user 'u*'.
+        self._assert_unknown_user("u*", "user2@123")
+        self._assert_unknown_user("user*", "x")
+        self._assert_unknown_user("*", "user2@123")
+
+    def test_filter_syntax_in_username_is_not_interpreted(self):
+        self.vk.execute_command("CONFIG", "SET", "ldap.return_auth_errors", "yes")
+
+        # Unescaped, this yields '(&(objectClass=*)(uid=*)(uid=u2))'.
+        self._assert_unknown_user("*)(uid=u2", "user2@123")
+        self._assert_unknown_user("u*)(|(cn=a)(cn=b)", "x")
+
+    def test_injection_rejected_without_auth_errors(self):
+        with self.assertRaises((AuthenticationError, ResponseError)):
+            self.vk.execute_command("AUTH", "u*", "user2@123")
+
+        # The real user still authenticates.
+        self.vk.execute_command("AUTH", "u2", "user2@123")
+        resp = self.vk.execute_command("ACL", "WHOAMI")
+        self.assertEqual(resp.decode(), "u2")
+
+
+class LdapModuleCredentialValidationTest(LdapTestCase):
+    def setUp(self):
+        super(LdapModuleCredentialValidationTest, self).setUp()
+
+        self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", "bind")
+        self.vk.execute_command("CONFIG", "SET", "ldap.bind_dn_prefix", "cn=")
+        self.vk.execute_command(
+            "CONFIG", "SET", "ldap.bind_dn_suffix", ",OU=devops,DC=valkey,DC=io"
+        )
+
+    def _assert_all_servers_healthy(self):
+        info = parse_valkey_info_section(
+            self.vk.execute_command("INFO LDAP").decode("utf-8")
+        )
+        servers = ldap_servers(info)
+        self.assertTrue(servers)
+        for server in servers:
+            self.assertEqual(server.get("status"), "healthy", server)
+
+    def test_empty_password_rejected(self):
+        # An empty password is an RFC 4513 "unauthenticated bind" that some
+        # servers report as successful; it must never reach the LDAP server.
+        for mode in ("bind", "search+bind"):
+            self.vk.execute_command("CONFIG", "SET", "ldap.auth_mode", mode)
+            with self.assertRaises(ResponseError) as ctx:
+                self.vk.execute_command("AUTH", "user1", "")
+            self.assertIn("empty password", str(ctx.exception))
+            self.assertNotEqual(
+                self.vk.execute_command("ACL", "WHOAMI").decode(), "user1"
+            )
+
+    def test_oversized_password_rejected_and_servers_stay_healthy(self):
+        for _ in range(3):
+            with self.assertRaises(ResponseError) as ctx:
+                self.vk.execute_command("AUTH", "user1", "x" * (1024 * 1024))
+            self.assertIn("password too long", str(ctx.exception))
+
+        self._assert_all_servers_healthy()
+        self.vk.execute_command("AUTH", "user1", "user1@123")
+        self.assertEqual(self.vk.execute_command("ACL", "WHOAMI").decode(), "user1")
+
+    def test_oversized_username_rejected(self):
+        with self.assertRaises(ResponseError) as ctx:
+            self.vk.execute_command("AUTH", "u" * 257, "user1@123")
+        self.assertIn("username too long", str(ctx.exception))
+        self._assert_all_servers_healthy()
+
+    def test_max_length_credentials_reach_ldap(self):
+        # Credentials at the limit are still sent to LDAP (and rejected there).
+        self.vk.execute_command("CONFIG", "SET", "ldap.return_auth_errors", "yes")
+        with self.assertRaises(ResponseError) as ctx:
+            self.vk.execute_command("AUTH", "user1", "x" * 1024)
+        self.assertNotIn("too long", str(ctx.exception))
+        self._assert_all_servers_healthy()
+
+
 class LdapModuleFailoverTest(LdapTestCase):
     def setUp(self):
         super(LdapModuleFailoverTest, self).setUp()
@@ -236,6 +331,33 @@ class LdapModuleFailoverTest(LdapTestCase):
             DOCKER_SERVICES.restart_service(service2)
             self._wait_for_ldap_server_status("ldap", "healthy")
             self._wait_for_ldap_server_status("ldap-2", "healthy")
+
+    def _wait_for_ldap_server_status_with_deadline(self, server_name, status_desc, deadline):
+        end = time.time() + deadline
+        while time.time() < end:
+            result = self.vk.execute_command("INFO LDAP")
+            status = parse_valkey_info_section(result.decode("utf-8"))
+            for server in ldap_servers(status):
+                if server["host"] == server_name and server["status"] == status_desc:
+                    return
+            time.sleep(1)
+        self.fail(f"server {server_name} did not become {status_desc} within {deadline}s")
+
+    def test_unresponsive_server_marked_unhealthy(self):
+        # A paused container keeps accepting TCP connections but never answers.
+        # The failure detector ping must time out instead of hanging forever.
+        self.vk.execute_command("CONFIG", "SET", "ldap.timeout_ldap_operation", "2")
+        service = DOCKER_SERVICES.pause_service("ldap")
+        try:
+            self._wait_for_ldap_server_status_with_deadline("ldap", "unhealthy", 30)
+
+            # The other server keeps being monitored and serving requests.
+            self._wait_for_ldap_server_status_with_deadline("ldap-2", "healthy", 10)
+            self.test_ldap_auth()
+        finally:
+            DOCKER_SERVICES.unpause_service(service)
+            self.vk.execute_command("CONFIG", "SET", "ldap.timeout_ldap_operation", "10")
+        self._wait_for_ldap_server_status_with_deadline("ldap", "healthy", 30)
 
     def test_multi_auth_with_failover(self):
         stop_worker = False
