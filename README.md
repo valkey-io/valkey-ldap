@@ -177,7 +177,7 @@ CONFIG SET ldap.acl_fallback_enabled false
 ### Important Behavior
 
 **Server Unavailability vs Credential Rejection:**
-- ✅ **Server unavailable** (connection failure, no healthy servers): Falls back to ACL if enabled
+- ✅ **Server unavailable** (connection failure, timeout, no healthy servers, or a server-side error such as `operationsError`, `timeLimitExceeded`, `busy` or `unavailable`): Falls back to ACL if enabled
 - ❌ **Wrong credentials** (invalid password, user not found): Never falls back to ACL
 - ❌ **LDAP rejects credentials**: Never falls back to ACL
 

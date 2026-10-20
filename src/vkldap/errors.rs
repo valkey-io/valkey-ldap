@@ -100,13 +100,37 @@ impl VkLdapError {
     /// Returns true if the error indicates the LDAP server is unavailable
     /// This is used to distinguish server unavailability from authentication failures
     pub fn is_server_unavailable(&self) -> bool {
-        matches!(
-            self,
+        match self {
             VkLdapError::NoHealthyServerAvailable(_)
-                | VkLdapError::LdapConnectionError(_)
-                | VkLdapError::NoServerConfigured
-                | VkLdapError::SchedulerNotReady
-        )
+            | VkLdapError::LdapConnectionError(_)
+            | VkLdapError::NoServerConfigured
+            | VkLdapError::SchedulerNotReady => true,
+            // The server answered, but with an error about itself rather than
+            // about the credentials, so it couldn't judge them
+            VkLdapError::LdapBindError(ldap_err)
+            | VkLdapError::LdapAdminBindError(ldap_err)
+            | VkLdapError::LdapSearchError(ldap_err) => is_server_side_failure(ldap_err),
+            _ => false,
+        }
+    }
+}
+
+/// Returns true if the LDAP error reports a timeout or a failure on the
+/// server's side instead of a verdict on the request.
+fn is_server_side_failure(ldap_err: &LdapError) -> bool {
+    match ldap_err {
+        LdapError::Timeout { .. } => true,
+        // RFC 4511 result codes:
+        // - 1 (operationsError): the server failed to process the operation
+        // - 3 (timeLimitExceeded): the server-side time limit expired
+        // - 51 (busy), 52 (unavailable): the server can't serve the request now
+        // - 80 (other): internal server error
+        // Client-side codes some servers and proxies relay:
+        // - 81 (serverDown), 85 (timeout), 91 (connectError)
+        LdapError::LdapResult { result } => {
+            matches!(result.rc, 1 | 3 | 51 | 52 | 80 | 81 | 85 | 91)
+        }
+        _ => false,
     }
 }
 
@@ -280,5 +304,27 @@ mod tests {
         assert!(!VkLdapError::NoHealthyServerAvailable(vec![]).rules_out_wrong_password());
         assert!(!VkLdapError::MultipleEntryFound("uid=x*".to_string()).rules_out_wrong_password());
         assert!(!VkLdapError::NoLdapEntryFound("uid=x".to_string()).rules_out_wrong_password());
+    }
+
+    #[test]
+    fn server_side_failures_are_unavailable() {
+        for rc in [1, 3, 51, 52, 80, 81, 85, 91] {
+            assert!(VkLdapError::LdapBindError(ldap_result_error(rc)).is_server_unavailable());
+            assert!(VkLdapError::LdapAdminBindError(ldap_result_error(rc)).is_server_unavailable());
+            assert!(VkLdapError::LdapSearchError(ldap_result_error(rc)).is_server_unavailable());
+            assert!(!VkLdapError::LdapBindError(ldap_result_error(rc)).is_user_not_found());
+        }
+    }
+
+    #[test]
+    fn credential_verdicts_are_not_unavailable() {
+        // invalidCredentials, insufficientAccessRights, noSuchObject,
+        // unwillingToPerform and success mean the server judged the request
+        for rc in [0, 32, 49, 50, 53] {
+            assert!(!VkLdapError::LdapBindError(ldap_result_error(rc)).is_server_unavailable());
+            assert!(!VkLdapError::LdapSearchError(ldap_result_error(rc)).is_server_unavailable());
+        }
+        assert!(!VkLdapError::NoLdapEntryFound("uid=x".to_string()).is_server_unavailable());
+        assert!(!VkLdapError::MultipleEntryFound("uid=x*".to_string()).is_server_unavailable());
     }
 }
