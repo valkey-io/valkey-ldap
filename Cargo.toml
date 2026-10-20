@@ -13,13 +13,15 @@ readme = "README.md"
 crate-type = ["cdylib"]
 
 [features]
-default = ["min-valkey-compatibility-version-8-0"]
+default = ["min-valkey-compatibility-version-9-0"]
 enable-system-alloc = ["valkey-module/enable-system-alloc"]
 min-redis-compatibility-version-7-2 = ["valkey-module/min-redis-compatibility-version-7-2"]
 min-valkey-compatibility-version-8-0 = ["valkey-module/min-valkey-compatibility-version-8-0"]
+# Only exposes the HANDLE_ATOMIC_SLOT_MIGRATION constant; the module still loads on Valkey 8.x
+min-valkey-compatibility-version-9-0 = ["valkey-module/min-valkey-compatibility-version-9-0"]
 
 [dependencies]
-valkey-module = "0.1.9"
+valkey-module = "0.1.15"
 ldap3 = "0.11.5"
 lazy_static = "1.5.0"
 paste = "1.0.15"
@@ -30,6 +32,6 @@ rand = "0.9.1"
 const-str = "0.6.2"
 futures = "0.3.31"
 tokio = {version="1.45.0", features=["rt", "rt-multi-thread", "macros"]}
-valkey-module-macros = "0.1.9"
+valkey-module-macros = "0.1.15"
 linkme = "0.3.33"
 strum_macros = "0.27.1"

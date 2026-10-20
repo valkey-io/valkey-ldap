@@ -6,9 +6,10 @@ mod version;
 mod vkldap;
 
 use log::error;
+#[cfg(feature = "min-valkey-compatibility-version-9-0")]
+use valkey_module::raw::ModuleOptions;
 use valkey_module::{
-    Context, Status, ValkeyString, configuration::ConfigurationFlags, raw::ModuleOptions,
-    valkey_module,
+    Context, Status, ValkeyString, configuration::ConfigurationFlags, valkey_module,
 };
 
 use auth::ldap_auth_blocking_callback;
@@ -25,11 +26,12 @@ fn initializer(ctx: &Context, _args: &[ValkeyString]) -> Status {
         ctx.log_warning(format!("failed to setup log: {err}").as_str());
     }
 
+    // Atomic slot migration was introduced in Valkey 9; older servers don't know this
+    // option, so we only set it when running on Valkey 9 or later.
+    #[cfg(feature = "min-valkey-compatibility-version-9-0")]
     if let Ok(version) = ctx.get_server_version() {
         if version.major >= 9 {
-            // VALKEYMODULE_OPTIONS_HANDLE_ATOMIC_SLOT_MIGRATION = (1 << 5), introduced in Valkey 9,
-            // not yet exposed by the valkey-module crate.
-            ctx.set_module_options(ModuleOptions::from_bits_retain(1 << 5));
+            ctx.set_module_options(ModuleOptions::HANDLE_ATOMIC_SLOT_MIGRATION);
         }
     }
 
